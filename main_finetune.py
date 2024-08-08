@@ -274,11 +274,6 @@ def main(args):
 
         # manually initialize fc layer
         trunc_normal_(model.head.weight, std=2e-5)
-
-    if args.freeze:
-        for name, param in model.named_parameters():
-            if "head" not in name:
-                param.requires_grad = False
         
     model.to(device)
 
