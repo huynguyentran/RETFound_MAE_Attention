@@ -23,9 +23,10 @@ import torchvision.transforms as transforms
 
 from pytorch_grad_cam import GradCAM, HiResCAM, ScoreCAM, GradCAMPlusPlus, AblationCAM, XGradCAM, EigenCAM, FullGrad
 from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
-
+from pytorch_grad_cam.utils.image import show_cam_on_image, scale_cam_image
 import cv2
 
+from PIL import Image
 
 
 def misc_measures(confusion_matrix):
@@ -146,46 +147,98 @@ def reshape_transform(tensor, height=14, width=14):
     result = result.transpose(2, 3).transpose(1, 2)
     return result
 
-def preprocess_image(image, mean, std):
-    transform = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize(mean=mean, std=std),
-    ])
-    tensor = transform(image).unsqueeze(0)  # Add batch dimension
-    return tensor.requires_grad_()
+
+# def visualize_cam_for_image(model, input_image, target_layer, save_path, device):
+#     model.eval()  # Ensure model is in evaluation mode
+
+#     # Convert input_image to tensor if it's a numpy array
+#     if isinstance(input_image, np.ndarray):
+#         input_image = torch.tensor(input_image).float()
+
+#     # Ensure input tensor has requires_grad=True
+#     if not input_image.requires_grad:
+#         input_image.requires_grad_()
+    
+#     # Convert from (H, W, C) to (C, H, W) and add batch dimension
+#     if len(input_image.shape) == 3:
+#         input_image = input_image.permute(2, 0, 1).unsqueeze(0)
+    
+#     # Ensure input tensor is on the correct device
+#     input_tensor = input_image.to(device)
+    
+#     # Define EigenCAM
+#     cam = EigenCAM(model=model, target_layers=target_layer, use_cuda=device.type == 'cuda')
+
+#     # Define target class for CAM
+#     targets = [0]  # Change this if needed
+
+#     # Get CAM output
+#     try:
+#         grayscale_cam = cam(input_tensor=input_tensor, targets=targets)[0, :, :]
+        
+#         # Convert input_image to numpy array (CHW to HWC)
+#         img = np.transpose(input_image.squeeze().cpu().numpy(), (1, 2, 0))
+        
+#         # Normalize the image to [0, 1]
+#         img = np.clip(img, 0, 1)  # Ensure values are in range [0, 1]
+
+#         # Apply CAM
+#         cam_image = show_cam_on_image(img, grayscale_cam, use_rgb=True)
+        
+#         # Save the CAM image
+#         Image.fromarray(cam_image).save(save_path)
+#     except RuntimeError as e:
+#         print(f"Error during Grad-CAM computation: {e}")
 
 
-def visualize_cam_for_image(model, input_image, target_layer, save_path):
-    model.eval()  # Ensure model is in evaluation mode
-    with torch.no_grad():
-        cam = GradCAM(model=model, target_layers=target_layer, reshape_transform=reshape_transform)
-        input_tensor = preprocess_image(input_image, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-        targets = [ClassifierOutputTarget(0)]  # Replace with your target class
-        cam_output = cam(input_tensor=input_tensor, targets=targets)
-        
-        # Use the first element if multiple outputs are returned
-        cam_output = cam_output[0, :]
-        
-        # Apply color map to the CAM output
-        heatmap = cv2.applyColorMap(np.uint8(255 * cam_output), cv2.COLORMAP_JET)
-        heatmap = np.float32(heatmap) / 255
-        
-        # Normalize and prepare input image
-        input_image = np.float32(input_image) / 255
-        
-        # Overlay the heatmap on the input image
-        overlayed_img = heatmap + input_image
-        overlayed_img = overlayed_img / np.max(overlayed_img)
-        
-        # Save the image
-        plt.imshow(overlayed_img)
-        plt.axis('off')
-        plt.savefig(save_path, dpi=600, bbox_inches='tight')
-        plt.close()
+def visualize_cam_for_image(model, input_image, target_layer, save_path, device):
+    model.eval()
+    
+    # Ensure input_image is a tensor and move it to the appropriate device
+    if isinstance(input_image, np.ndarray):
+        input_image = torch.tensor(input_image).unsqueeze(0).to(device)  # Add batch dimension and move to device
+        input_image = input_image.permute(0, 3, 1, 2)  # Convert from NHWC to NCHW
+    
+    input_image.requires_grad_()  # Ensure the input requires gradients
+    
+    # Define Grad-CAM
+    cam = GradCAM(model=model, target_layers=target_layer, use_cuda=device.type == 'cuda')
+    
+    # Define the target class for Grad-CAM
+    targets = [ClassifierOutputTarget(0)]  # Replace 0 with the desired target class index
+    
+    # Compute the Grad-CAM output
+    try:
+        cam_output = cam(input_tensor=input_image, targets=targets)
+    except RuntimeError as e:
+        print(f"Error during Grad-CAM computation: {e}")
+        return
+    
+    # If multiple outputs are returned, use the first
+    cam_output = cam_output[0, :]
+    
+    # Apply color map to CAM output
+    heatmap = cv2.applyColorMap(np.uint8(255 * cam_output), cv2.COLORMAP_JET)
+    heatmap = np.float32(heatmap) / 255
+    
+    # Normalize and prepare input image
+    input_image = input_image.squeeze().cpu().numpy().transpose(1, 2, 0)  # Convert from NCHW to NHWC
+    input_image = np.float32(input_image) / 255
+    
+    # Overlay the heatmap on the input image
+    overlayed_img = heatmap + input_image
+    overlayed_img = overlayed_img / np.max(overlayed_img)
+    
+    # Save the image
+    plt.imshow(overlayed_img)
+    plt.axis('off')
+    plt.savefig(save_path, dpi=600, bbox_inches='tight')
+    plt.close()
 
 
 
-@torch.no_grad()
+
+# @torch.no_grad()
 def evaluate(data_loader, model, device, task, epoch, mode, num_class):
     criterion = torch.nn.CrossEntropyLoss()
 
@@ -234,11 +287,9 @@ def evaluate(data_loader, model, device, task, epoch, mode, num_class):
             
             input_image = images[0].cpu().numpy().transpose(1, 2, 0)  
             
-            target_layer = [model.module.blocks[22].attn]
-            print(f'Input image shape: {input_image.shape}')
-            print(f'Target layer: {target_layer}')
+            target_layer = [model.module.blocks[21].attn]
             save_path = os.path.join(task,'GradCam', f'grad_cam_epoch_{epoch}.jpg')
-            visualize_cam_for_image(model, input_image, target_layer, save_path)
+            visualize_cam_for_image(model, input_image, target_layer, save_path, device)
 
 
     true_label_decode_list = np.array(true_label_decode_list)
@@ -261,8 +312,8 @@ def evaluate(data_loader, model, device, task, epoch, mode, num_class):
             
     
     if mode=='test':
-        # cm = ConfusionMatrix(actual_vector=true_label_decode_list, predict_vector=prediction_decode_list)
-        cm = confusion_matrix(actual_vector=true_label_decode_list, predict_vector=prediction_decode_list)
+        cm = ConfusionMatrix(actual_vector=true_label_decode_list, predict_vector=prediction_decode_list)
+        # cm = confusion_matrix(actual_vector=true_label_decode_list, predict_vector=prediction_decode_list)
         cm.plot(cmap=plt.cm.Blues,number_label=True,normalized=True,plot_lib="matplotlib")
         plt.savefig(task+'confusion_matrix_test.jpg',dpi=600,bbox_inches ='tight')
     
