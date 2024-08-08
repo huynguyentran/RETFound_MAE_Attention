@@ -19,11 +19,10 @@ from sklearn.metrics import accuracy_score, roc_auc_score, f1_score, average_pre
 from pycm import *
 import matplotlib.pyplot as plt
 import numpy as np
-
+import torchvision.transforms as transforms
 
 from pytorch_grad_cam import GradCAM, HiResCAM, ScoreCAM, GradCAMPlusPlus, AblationCAM, XGradCAM, EigenCAM, FullGrad
 from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
-from pytorch_grad_cam.utils.image import preprocess_image, show_cam_on_image
 
 import cv2
 
@@ -147,21 +146,43 @@ def reshape_transform(tensor, height=14, width=14):
     result = result.transpose(2, 3).transpose(1, 2)
     return result
 
+def preprocess_image(image, mean, std):
+    transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize(mean=mean, std=std),
+    ])
+    tensor = transform(image).unsqueeze(0)  # Add batch dimension
+    return tensor.requires_grad_()
+
+
 def visualize_cam_for_image(model, input_image, target_layer, save_path):
-    cam = GradCAM(model=model, target_layers=target_layer, reshape_transform=reshape_transform)
-    input_tensor = preprocess_image(input_image, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    targets = [ClassifierOutputTarget(0)]  # Replace with your target class
-    grayscale_cam = cam(input_tensor=input_tensor, targets=targets)
-    grayscale_cam = grayscale_cam[0, :]
-    heatmap = cv2.applyColorMap(np.uint8(255 * grayscale_cam), cv2.COLORMAP_JET)
-    heatmap = np.float32(heatmap) / 255
-    input_image = np.float32(input_image) / 255
-    overlayed_img = heatmap + input_image
-    overlayed_img = overlayed_img / np.max(overlayed_img)
-    plt.imshow(overlayed_img)
-    plt.axis('off')
-    plt.savefig(save_path, dpi=600, bbox_inches='tight')
-    plt.close()
+    model.eval()  # Ensure model is in evaluation mode
+    with torch.no_grad():
+        cam = GradCAM(model=model, target_layers=target_layer, reshape_transform=reshape_transform)
+        input_tensor = preprocess_image(input_image, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        targets = [ClassifierOutputTarget(0)]  # Replace with your target class
+        cam_output = cam(input_tensor=input_tensor, targets=targets)
+        
+        # Use the first element if multiple outputs are returned
+        cam_output = cam_output[0, :]
+        
+        # Apply color map to the CAM output
+        heatmap = cv2.applyColorMap(np.uint8(255 * cam_output), cv2.COLORMAP_JET)
+        heatmap = np.float32(heatmap) / 255
+        
+        # Normalize and prepare input image
+        input_image = np.float32(input_image) / 255
+        
+        # Overlay the heatmap on the input image
+        overlayed_img = heatmap + input_image
+        overlayed_img = overlayed_img / np.max(overlayed_img)
+        
+        # Save the image
+        plt.imshow(overlayed_img)
+        plt.axis('off')
+        plt.savefig(save_path, dpi=600, bbox_inches='tight')
+        plt.close()
+
 
 
 @torch.no_grad()
@@ -210,8 +231,12 @@ def evaluate(data_loader, model, device, task, epoch, mode, num_class):
     # gather the stats from all processes
 
         if mode == 'test' and epoch % 10 == 0:
+            
             input_image = images[0].cpu().numpy().transpose(1, 2, 0)  
-            target_layer = [model.blocks[-1].norm1] 
+            
+            target_layer = [model.module.blocks[22].attn]
+            print(f'Input image shape: {input_image.shape}')
+            print(f'Target layer: {target_layer}')
             save_path = os.path.join(task,'GradCam', f'grad_cam_epoch_{epoch}.jpg')
             visualize_cam_for_image(model, input_image, target_layer, save_path)
 
