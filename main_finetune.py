@@ -147,6 +147,10 @@ def get_args_parser():
     parser.add_argument('--dist_on_itp', action='store_true')
     parser.add_argument('--dist_url', default='env://',
                         help='url used to set up distributed training')
+    
+
+    parser.add_argument('--freeze', default=0,
+                    help='freeze the model except the final layer.')
 
     return parser
 
@@ -271,6 +275,11 @@ def main(args):
         # manually initialize fc layer
         trunc_normal_(model.head.weight, std=2e-5)
 
+    if args.freeze:
+        for name, param in model.named_parameters():
+            if "head" not in name:
+                param.requires_grad = False
+        
     model.to(device)
 
     model_without_ddp = model
