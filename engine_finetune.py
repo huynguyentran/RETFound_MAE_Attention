@@ -15,11 +15,17 @@ from timm.utils import accuracy
 from typing import Iterable, Optional
 import util.misc as misc
 import util.lr_sched as lr_sched
-from sklearn.metrics import accuracy_score, roc_auc_score, f1_score, average_precision_score,multilabel_confusion_matrix
+from sklearn.metrics import accuracy_score, roc_auc_score, f1_score, average_precision_score,multilabel_confusion_matrix, confusion_matrix
 from pycm import *
 import matplotlib.pyplot as plt
 import numpy as np
 
+
+from pytorch_grad_cam import GradCAM, HiResCAM, ScoreCAM, GradCAMPlusPlus, AblationCAM, XGradCAM, EigenCAM, FullGrad
+from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
+from pytorch_grad_cam.utils.image import preprocess_image, show_cam_on_image
+
+import cv2
 
 
 
@@ -134,6 +140,28 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
 
 
+def reshape_transform(tensor, height=14, width=14):
+    result = tensor[:, 1 :  , :].reshape(tensor.size(0),
+        height, width, tensor.size(2))
+
+    result = result.transpose(2, 3).transpose(1, 2)
+    return result
+
+def visualize_cam_for_image(model, input_image, target_layer, save_path):
+    cam = GradCAM(model=model, target_layers=target_layer, reshape_transform=reshape_transform)
+    input_tensor = preprocess_image(input_image, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    targets = [ClassifierOutputTarget(0)]  # Replace with your target class
+    grayscale_cam = cam(input_tensor=input_tensor, targets=targets)
+    grayscale_cam = grayscale_cam[0, :]
+    heatmap = cv2.applyColorMap(np.uint8(255 * grayscale_cam), cv2.COLORMAP_JET)
+    heatmap = np.float32(heatmap) / 255
+    input_image = np.float32(input_image) / 255
+    overlayed_img = heatmap + input_image
+    overlayed_img = overlayed_img / np.max(overlayed_img)
+    plt.imshow(overlayed_img)
+    plt.axis('off')
+    plt.savefig(save_path, dpi=600, bbox_inches='tight')
+    plt.close()
 
 
 @torch.no_grad()
@@ -180,6 +208,14 @@ def evaluate(data_loader, model, device, task, epoch, mode, num_class):
         metric_logger.update(loss=loss.item())
         metric_logger.meters['acc1'].update(acc1.item(), n=batch_size)
     # gather the stats from all processes
+
+        if mode == 'test' and epoch % 10 == 0:
+            input_image = images[0].cpu().numpy().transpose(1, 2, 0)  
+            target_layer = [model.blocks[-1].norm1] 
+            save_path = os.path.join(task,'GradCam', f'grad_cam_epoch_{epoch}.jpg')
+            visualize_cam_for_image(model, input_image, target_layer, save_path)
+
+
     true_label_decode_list = np.array(true_label_decode_list)
     prediction_decode_list = np.array(prediction_decode_list)
     confusion_matrix = multilabel_confusion_matrix(true_label_decode_list, prediction_decode_list,labels=[i for i in range(num_class)])
@@ -200,7 +236,8 @@ def evaluate(data_loader, model, device, task, epoch, mode, num_class):
             
     
     if mode=='test':
-        cm = ConfusionMatrix(actual_vector=true_label_decode_list, predict_vector=prediction_decode_list)
+        # cm = ConfusionMatrix(actual_vector=true_label_decode_list, predict_vector=prediction_decode_list)
+        cm = confusion_matrix(actual_vector=true_label_decode_list, predict_vector=prediction_decode_list)
         cm.plot(cmap=plt.cm.Blues,number_label=True,normalized=True,plot_lib="matplotlib")
         plt.savefig(task+'confusion_matrix_test.jpg',dpi=600,bbox_inches ='tight')
     
