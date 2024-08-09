@@ -191,54 +191,34 @@ def reshape_transform(tensor, height=14, width=14):
 #         print(f"Error during Grad-CAM computation: {e}")
 
 
-def visualize_cam_for_image(model, input_image, target_layer, save_path, device):
-    model.eval()
-    
-    # Ensure input_image is a tensor and move it to the appropriate device
-    if isinstance(input_image, np.ndarray):
-        input_image = torch.tensor(input_image).unsqueeze(0).to(device)  # Add batch dimension and move to device
-        input_image = input_image.permute(0, 3, 1, 2)  # Convert from NHWC to NCHW
-    
-    input_image.requires_grad_()  # Ensure the input requires gradients
-    
-    # Define Grad-CAM
-    cam = GradCAM(model=model, target_layers=target_layer, use_cuda=device.type == 'cuda')
-    
-    # Define the target class for Grad-CAM
-    targets = [ClassifierOutputTarget(0)]  # Replace 0 with the desired target class index
-    
-    # Compute the Grad-CAM output
-    try:
-        cam_output = cam(input_tensor=input_image, targets=targets)
-    except RuntimeError as e:
-        print(f"Error during Grad-CAM computation: {e}")
-        return
-    
-    # If multiple outputs are returned, use the first
-    cam_output = cam_output[0, :]
-    
-    # Apply color map to CAM output
-    heatmap = cv2.applyColorMap(np.uint8(255 * cam_output), cv2.COLORMAP_JET)
-    heatmap = np.float32(heatmap) / 255
-    
-    # Normalize and prepare input image
-    input_image = input_image.squeeze().cpu().numpy().transpose(1, 2, 0)  # Convert from NCHW to NHWC
-    input_image = np.float32(input_image) / 255
-    
-    # Overlay the heatmap on the input image
-    overlayed_img = heatmap + input_image
-    overlayed_img = overlayed_img / np.max(overlayed_img)
-    
-    # Save the image
-    plt.imshow(overlayed_img)
-    plt.axis('off')
-    plt.savefig(save_path, dpi=600, bbox_inches='tight')
-    plt.close()
+def visualize_cam_for_image(model, input_image, target_layer, save_dir, device, prediction, batch_idx):
+    input_tensor = input_image.unsqueeze(0).to(device)  
+    os.makedirs(save_dir, exist_ok=True)
+    original_image = input_tensor.squeeze(0).cpu().numpy().transpose(1, 2, 0)
+    original_image = (original_image * 255).astype(np.uint8) 
+    original_image_path = os.path.join(save_dir, f"original_image_{batch_idx}.jpg")
+    Image.fromarray(original_image).save(original_image_path)
+
+    cam = GradCAM(model=model, target_layers=[target_layer], reshape_transform=reshape_transform, use_cuda=device.type == 'cuda')
+    cam_output = cam(input_tensor=input_tensor)
+    print(f"CAM output shape: {cam_output[0].shape}")
+    print(f"CAM output min: {cam_output[0].min()}, max: {cam_output[0].max()}")
+    if cam_output[0].max() != cam_output[0].min():
+        cam_output = cam_output[0]
+        cam_output = (cam_output - cam_output.min()) / (cam_output.max() - cam_output.min() + 1e-8)  
+        cam_output = np.uint8(255 * cam_output)  
+        cam_output = cv2.equalizeHist(cam_output)
+        cam_colored = cv2.applyColorMap(cam_output, cv2.COLORMAP_JET)
+        save_path = os.path.join(save_dir, f"grad_cam_layer_{batch_idx}_prediction_{prediction}.jpg")
+        save_path_2 = os.path.join(save_dir, f"grad_cam_layer_{batch_idx}_prediction_{prediction}_colored.jpg")
+        Image.fromarray(cam_output).save(save_path)
+        Image.fromarray(cam_colored).save(save_path_2)
 
 
 
 
-# @torch.no_grad()
+
+@torch.no_grad()
 def evaluate(data_loader, model, device, task, epoch, mode, num_class):
     criterion = torch.nn.CrossEntropyLoss()
 
@@ -281,15 +261,16 @@ def evaluate(data_loader, model, device, task, epoch, mode, num_class):
         batch_size = images.shape[0]
         metric_logger.update(loss=loss.item())
         metric_logger.meters['acc1'].update(acc1.item(), n=batch_size)
-    # gather the stats from all processes
 
-        if mode == 'test' and epoch % 10 == 0:
-            
-            input_image = images[0].cpu().numpy().transpose(1, 2, 0)  
-            
-            target_layer = [model.module.blocks[21].attn]
-            save_path = os.path.join(task,'GradCam', f'grad_cam_epoch_{epoch}.jpg')
-            visualize_cam_for_image(model, input_image, target_layer, save_path, device)
+        if mode == 'test':
+            for i in range(batch_size):
+                if true_label[i, 0].item() == 0:
+                    prediction = prediction_decode[i].item()
+                    input_image = images[i] 
+                    target_layer = [model.module.blocks[21].attn]
+                    save_path = os.path.join(task,'GradCam')
+                    with torch.enable_grad():
+                        visualize_cam_for_image(model, input_image, target_layer, save_path, device, prediction)
 
 
     true_label_decode_list = np.array(true_label_decode_list)
