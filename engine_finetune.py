@@ -270,7 +270,7 @@ def evaluate(data_loader, model, device, task, epoch, mode, num_class):
                     target_layer = [model.module.blocks[21].attn]
                     save_path = os.path.join(task,'GradCam')
                     with torch.enable_grad():
-                        visualize_cam_for_image(model, input_image, target_layer, save_path, device, prediction)
+                        visualize_cam_for_image(model, input_image, target_layer, save_path, device, prediction, i)
 
 
     true_label_decode_list = np.array(true_label_decode_list)
