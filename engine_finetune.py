@@ -148,63 +148,29 @@ def reshape_transform(tensor, height=14, width=14):
     return result
 
 
-# def visualize_cam_for_image(model, input_image, target_layer, save_path, device):
-#     model.eval()  # Ensure model is in evaluation mode
-
-#     # Convert input_image to tensor if it's a numpy array
-#     if isinstance(input_image, np.ndarray):
-#         input_image = torch.tensor(input_image).float()
-
-#     # Ensure input tensor has requires_grad=True
-#     if not input_image.requires_grad:
-#         input_image.requires_grad_()
-    
-#     # Convert from (H, W, C) to (C, H, W) and add batch dimension
-#     if len(input_image.shape) == 3:
-#         input_image = input_image.permute(2, 0, 1).unsqueeze(0)
-    
-#     # Ensure input tensor is on the correct device
-#     input_tensor = input_image.to(device)
-    
-#     # Define EigenCAM
-#     cam = EigenCAM(model=model, target_layers=target_layer, use_cuda=device.type == 'cuda')
-
-#     # Define target class for CAM
-#     targets = [0]  # Change this if needed
-
-#     # Get CAM output
-#     try:
-#         grayscale_cam = cam(input_tensor=input_tensor, targets=targets)[0, :, :]
-        
-#         # Convert input_image to numpy array (CHW to HWC)
-#         img = np.transpose(input_image.squeeze().cpu().numpy(), (1, 2, 0))
-        
-#         # Normalize the image to [0, 1]
-#         img = np.clip(img, 0, 1)  # Ensure values are in range [0, 1]
-
-#         # Apply CAM
-#         cam_image = show_cam_on_image(img, grayscale_cam, use_rgb=True)
-        
-#         # Save the CAM image
-#         Image.fromarray(cam_image).save(save_path)
-#     except RuntimeError as e:
-#         print(f"Error during Grad-CAM computation: {e}")
+def denormalize(tensor, mean, std):
+    mean = torch.tensor(mean).reshape(1, 1, 3).to(tensor.device)
+    std = torch.tensor(std).reshape(1, 1, 3).to(tensor.device)
+    return tensor * std + mean
 
 
 def visualize_cam_for_image(model, input_image, target_layer, save_dir, device, prediction, batch_idx):
+    mean = [0.485, 0.456, 0.406]
+    std = [0.229, 0.224, 0.225]
+    denormalized_image = denormalize(input_image, mean, std)
+
     input_tensor = input_image.unsqueeze(0).to(device)  
+    original_image = denormalized_image.cpu().numpy().transpose(1, 2, 0)  
+    original_image = np.clip(original_image * 255, 0, 255).astype(np.uint8)  
     os.makedirs(save_dir, exist_ok=True)
-    original_image = input_tensor.squeeze(0).cpu().numpy().transpose(1, 2, 0)
-    original_image = (original_image * 255).astype(np.uint8) 
     original_image_path = os.path.join(save_dir, f"original_image_{batch_idx}.jpg")
     Image.fromarray(original_image).save(original_image_path)
 
     cam = GradCAM(model=model, target_layers=target_layer, reshape_transform=reshape_transform, use_cuda=device.type == 'cuda')
     cam_output = cam(input_tensor=input_tensor)
-    print(f"CAM output shape: {cam_output[0].shape}")
-    print(f"CAM output min: {cam_output[0].min()}, max: {cam_output[0].max()}")
     if cam_output[0].max() != cam_output[0].min():
         cam_output = cam_output[0]
+        
         cam_output = (cam_output - cam_output.min()) / (cam_output.max() - cam_output.min() + 1e-8)  
         cam_output = np.uint8(255 * cam_output)  
         cam_output = cv2.equalizeHist(cam_output)
