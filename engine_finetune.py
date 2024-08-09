@@ -149,8 +149,8 @@ def reshape_transform(tensor, height=14, width=14):
 
 
 def denormalize(tensor, mean, std):
-    mean = torch.tensor(mean).reshape(1, 1, 3).to(tensor.device)
-    std = torch.tensor(std).reshape(1, 1, 3).to(tensor.device)
+    mean = torch.tensor(mean).view(3, 1, 1).to(tensor.device)  # Shape (3, 1, 1)
+    std = torch.tensor(std).view(3, 1, 1).to(tensor.device)    # Shape (3, 1, 1)
     return tensor * std + mean
 
 
