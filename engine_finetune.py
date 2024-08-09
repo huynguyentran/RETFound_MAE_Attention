@@ -199,7 +199,7 @@ def visualize_cam_for_image(model, input_image, target_layer, save_dir, device, 
     original_image_path = os.path.join(save_dir, f"original_image_{batch_idx}.jpg")
     Image.fromarray(original_image).save(original_image_path)
 
-    cam = GradCAM(model=model, target_layers=[target_layer], reshape_transform=reshape_transform, use_cuda=device.type == 'cuda')
+    cam = GradCAM(model=model, target_layers=target_layer, reshape_transform=reshape_transform, use_cuda=device.type == 'cuda')
     cam_output = cam(input_tensor=input_tensor)
     print(f"CAM output shape: {cam_output[0].shape}")
     print(f"CAM output min: {cam_output[0].min()}, max: {cam_output[0].max()}")
