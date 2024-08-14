@@ -163,6 +163,7 @@ def visualize_cam_for_image(model, input_image, target_layer, save_dir, device, 
     original_image = denormalized_image.cpu().numpy().transpose(1, 2, 0)  
     original_image = np.clip(original_image * 255, 0, 255).astype(np.uint8)  
     os.makedirs(save_dir, exist_ok=True)
+
     original_image_path = os.path.join(save_dir, f"layer_{str(target_layer)}_batch_{batch_idx}_original.jpg")
     Image.fromarray(original_image).save(original_image_path)
 
@@ -257,6 +258,7 @@ def evaluate(data_loader, model, device, task, epoch, mode, num_class):
                     std = [0.229, 0.224, 0.225]
                     denormalized_image = denormalize(input_image, mean, std)
                     original_image = denormalized_image.cpu().numpy().transpose(1, 2, 0)  
+                    original_image = original_image.transpose(1, 2, 0).astype(np.float64)
                     superpixels = skimage.segmentation.quickshift(original_image, kernel_size=4, max_dist=200, ratio=0.2)
                     num_superpixels = np.unique(superpixels).shape[0]
                     superpixels = skimage.segmentation.quickshift(original_image, kernel_size=4, max_dist=200, ratio=0.2)

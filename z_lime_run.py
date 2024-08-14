@@ -1,4 +1,5 @@
 import torch
+import torch
 import models_vit
 from util.pos_embed import interpolate_pos_embed
 from timm.models.layers import trunc_normal_
@@ -99,7 +100,7 @@ def perturb_image(img, perturbation, segments):
 results = []
 for img_name in os.listdir(image_dir):
     img_path = os.path.join(image_dir, img_name)
-    if img_path.endswith('.jpg') or img_path.endswith('.JPG'):
+    if if img_path.lower().endswith('.jpg')::
         predicted_class, probabilities, original_image = predict(img_path, model, transform_test, device)
         print(f'Class: {predicted_class}')
         print(f'Probabilities: {probabilities.tolist()}')
