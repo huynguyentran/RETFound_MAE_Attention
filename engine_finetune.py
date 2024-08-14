@@ -257,7 +257,8 @@ def evaluate(data_loader, model, device, task, epoch, mode, num_class):
                     mean = [0.485, 0.456, 0.406]
                     std = [0.229, 0.224, 0.225]
                     denormalized_image = denormalize(input_image, mean, std)
-                    original_image = denormalized_image.cpu().numpy().transpose(1, 2, 0).astype(np.float64)
+                    original_image = denormalized_image.cpu().numpy()
+                    original_image = original_image.transpose(1, 2, 0).astype(np.float64)
                     superpixels = skimage.segmentation.quickshift(original_image, kernel_size=4, max_dist=200, ratio=0.2)
                     num_superpixels = np.unique(superpixels).shape[0]
                     superpixels = skimage.segmentation.quickshift(original_image, kernel_size=4, max_dist=200, ratio=0.2)
