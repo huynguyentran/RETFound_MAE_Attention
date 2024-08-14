@@ -20,17 +20,19 @@ from pycm import *
 import matplotlib.pyplot as plt
 import numpy as np
 import torchvision.transforms as transforms
-
+import skimage.io 
+import skimage.segmentation
 from pytorch_grad_cam import GradCAM, HiResCAM, ScoreCAM, GradCAMPlusPlus, AblationCAM, XGradCAM, EigenCAM, FullGrad
 from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
 from pytorch_grad_cam.utils.image import show_cam_on_image, scale_cam_image
 import cv2
-
+import copy
 from PIL import Image
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import pairwise_distances
 
 
 def misc_measures(confusion_matrix):
-    
     acc = []
     sensitivity = []
     specificity = []
@@ -62,8 +64,6 @@ def misc_measures(confusion_matrix):
     mcc_ = np.array(mcc_).mean()
     
     return acc, sensitivity, specificity, precision, G, F1_score_2, mcc_
-
-
 
 
 
@@ -182,6 +182,15 @@ def visualize_cam_for_image(model, input_image, target_layer, save_dir, device, 
 
 
 
+def perturb_image(img, perturbation, segments):
+    active_pixels = np.where(perturbation == 1)[0]
+    mask = np.zeros(segments.shape)
+    for active in active_pixels:
+        mask[segments == active] = 1 
+    perturbed_image = copy.deepcopy(img)
+    perturbed_image = perturbed_image * mask[:, :, np.newaxis]
+    return perturbed_image
+
 
 
 @torch.no_grad()
@@ -237,6 +246,63 @@ def evaluate(data_loader, model, device, task, epoch, mode, num_class):
                     save_path = os.path.join(task,'GradCam')
                     with torch.enable_grad():
                         visualize_cam_for_image(model, input_image, target_layer, save_path, device, prediction, i)
+
+        if mode == 'test':
+            results = []
+            save_dir = os.path.join(task,'Lime')
+            for i in range(batch_size):
+                if true_label[i, 0].item() == 0:
+                    input_image = images[i] 
+                    mean = [0.485, 0.456, 0.406]
+                    std = [0.229, 0.224, 0.225]
+                    denormalized_image = denormalize(input_image, mean, std)
+                    original_image = denormalized_image.cpu().numpy().transpose(1, 2, 0)  
+                    superpixels = skimage.segmentation.quickshift(original_image, kernel_size=4, max_dist=200, ratio=0.2)
+                    num_superpixels = np.unique(superpixels).shape[0]
+                    superpixels = skimage.segmentation.quickshift(original_image, kernel_size=4, max_dist=200, ratio=0.2)
+                    num_superpixels = np.unique(superpixels).shape[0]
+                    predicted_class = prediction_decode[i].item()
+                    num_perturb = 300
+                    perturbations = np.random.binomial(1, 0.5, size=(num_perturb, num_superpixels))
+                    predictions = []
+                    for pert in perturbations:
+                        perturbed_img = perturb_image(original_image, pert, superpixels)
+                        perturbed_img = torch.tensor(perturbed_img, dtype=torch.float32).permute(2, 0, 1).unsqueeze(0).to(device)
+                        with torch.no_grad():
+                            pred = model(perturbed_img)
+                        predictions.append(pred.cpu().numpy())
+                    
+                    predictions = np.array(predictions)
+                    original_superpixels = np.ones(num_superpixels)[np.newaxis, :]  
+                    distances = pairwise_distances(perturbations, original_superpixels, metric='cosine').ravel()
+                    kernel_width = 0.25
+                    weights = np.sqrt(np.exp(-(distances**2) / kernel_width**2))  
+                    
+                    simpler_model = LinearRegression()
+                    simpler_model.fit(X=perturbations, y=predictions[:, :, predicted_class], sample_weight=weights)
+                    coeff = simpler_model.coef_[0]
+                    
+                    num_top_features = 10
+                    top_features = np.argsort(coeff)[-num_top_features:]
+                    
+                    mask = np.zeros(num_superpixels)
+                    mask[top_features] = True  
+                    highlighted_image = perturb_image(original_image, mask, superpixels)
+                    if highlighted_image.max() > 1:
+                        highlighted_image = highlighted_image / 255.0
+                    
+                    # Save the images
+                    skimage.io.imsave(os.path.join(save_dir, f'batch_{i}_prediction_{predicted_class}_superpixels.png'),
+                                        skimage.segmentation.mark_boundaries(original_image / 2 + 0.5, superpixels))
+
+                    skimage.io.imsave(os.path.join(save_dir, f'batch_{i}_prediction_{predicted_class}_highlighted.png'), highlighted_image)
+
+                    results.append({
+                        'image': i,
+                        'predicted_class': predicted_class,
+                        'true_label': true_label[i, 0].item(),
+                        'highlighted_image': highlighted_image,
+                    })
 
 
     true_label_decode_list = np.array(true_label_decode_list)
