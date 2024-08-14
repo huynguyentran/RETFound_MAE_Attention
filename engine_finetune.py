@@ -164,7 +164,7 @@ def visualize_cam_for_image(model, input_image, target_layer, save_dir, device, 
     original_image = np.clip(original_image * 255, 0, 255).astype(np.uint8)  
     os.makedirs(save_dir, exist_ok=True)
 
-    original_image_path = os.path.join(save_dir, f"layer_{str(target_layer)}_batch_{batch_idx}_original.jpg")
+    original_image_path = os.path.join(save_dir, f"layer_21_batch_{batch_idx}_original.jpg")
     Image.fromarray(original_image).save(original_image_path)
 
     cam = GradCAM(model=model, target_layers=target_layer, reshape_transform=reshape_transform, use_cuda=device.type == 'cuda')
@@ -176,8 +176,8 @@ def visualize_cam_for_image(model, input_image, target_layer, save_dir, device, 
         cam_output = np.uint8(255 * cam_output)  
         cam_output = cv2.equalizeHist(cam_output)
         cam_colored = cv2.applyColorMap(cam_output, cv2.COLORMAP_JET)
-        save_path = os.path.join(save_dir, f"layer_{str(target_layer)}_batch_{batch_idx}_prediction_{prediction}_grad_cam.jpg")
-        save_path_2 = os.path.join(save_dir, f"layer_{str(target_layer)}_batch_{batch_idx}_prediction_{prediction}_grad_cam_colored.jpg")
+        save_path = os.path.join(save_dir, f"layer_21_batch_{batch_idx}_prediction_{prediction}_grad_cam.jpg")
+        save_path_2 = os.path.join(save_dir, f"layer_21_batch_{batch_idx}_prediction_{prediction}_grad_cam_colored.jpg")
         Image.fromarray(cam_output).save(save_path)
         Image.fromarray(cam_colored).save(save_path_2)
 
@@ -257,8 +257,7 @@ def evaluate(data_loader, model, device, task, epoch, mode, num_class):
                     mean = [0.485, 0.456, 0.406]
                     std = [0.229, 0.224, 0.225]
                     denormalized_image = denormalize(input_image, mean, std)
-                    original_image = denormalized_image.cpu().numpy().transpose(1, 2, 0)  
-                    original_image = original_image.transpose(1, 2, 0).astype(np.float64)
+                    original_image = denormalized_image.cpu().numpy().transpose(1, 2, 0).astype(np.float64)
                     superpixels = skimage.segmentation.quickshift(original_image, kernel_size=4, max_dist=200, ratio=0.2)
                     num_superpixels = np.unique(superpixels).shape[0]
                     superpixels = skimage.segmentation.quickshift(original_image, kernel_size=4, max_dist=200, ratio=0.2)
