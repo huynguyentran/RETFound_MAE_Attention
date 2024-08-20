@@ -210,13 +210,17 @@ def evaluate(data_loader, model, device, task, epoch, mode, num_class):
     true_label_onehot_list = []
     
 
-    features = {}  # Dictionary to store features**
+    # features = {}  # Dictionary to store features**
 
     # def get_features(name):
     #     def hook(model, input, output):
     #         features[name] = output.detach()
     #     return hook
     # model.blocks[-1].norm1.register_forward_hook(get_features('vit_last_block'))
+    dataset = data_loader.dataset
+    class_names = dataset.classes  # List of class names
+
+
 
     # switch to evaluation mode
     model.eval()
@@ -250,15 +254,51 @@ def evaluate(data_loader, model, device, task, epoch, mode, num_class):
         metric_logger.meters['acc1'].update(acc1.item(), n=batch_size)
 
         if mode == 'test':
-            for i in range(batch_size):
-                if true_label[i, 0].item() == 0:
-                    prediction = prediction_decode[i].item()
-                    input_image = images[i] 
-                    target_layer = [model.module.blocks[21].attn]
-                    save_path = os.path.join(task,'GradCam')
-                    with torch.enable_grad():
-                        visualize_cam_for_image(model, input_image, target_layer, save_path, device, prediction, i)
-                    print(f"Saved original and Grad-CAM for image {i} with predicted class {prediction}")
+            with torch.enable_grad():
+                save_dir = os.path.join(task, 'GradCam')
+                for i in range(batch_size):
+                    if true_label_decode[i].item() == 0:  # Check if true label is 0
+                        input_image = images[i]  # Add batch dimension
+                        prediction = prediction_decode[i].item()
+
+                        true_label_name = class_names[true_label_decode[i].item()]
+                        prediction_name = class_names[prediction]
+                        # Run Grad-CAM for each target layer
+                        if true_label_name == '2SKA_Suspected_Glaucoma':
+                            mean = [0.485, 0.456, 0.406]
+                            std = [0.229, 0.224, 0.225]
+                            denormalized_image = denormalize(input_image, mean, std)
+
+                            input_tensor = input_image.unsqueeze(0).to(device)  
+                            original_image = denormalized_image.cpu().numpy().transpose(1, 2, 0)  
+                            original_image = np.clip(original_image * 255, 0, 255).astype(np.uint8)  
+                            os.makedirs(save_dir, exist_ok=True)
+
+                            original_image_path = os.path.join(save_dir, f"batch_{i}_orginal_label_{prediction_name}.jpg")
+                            Image.fromarray(original_image).save(original_image_path)
+
+
+
+                            for j in [23]:
+                                target_layer = [model.module.blocks[j].norm1]
+                                cam = GradCAM(model=model, target_layers=target_layer, reshape_transform=reshape_transform, use_cuda=device.type == 'cuda')
+                                cam_output = cam(input_tensor=input_tensor)
+                                if cam_output[0].max() != cam_output[0].min():
+                                    cam_output = cam_output[0]
+                                    
+                                    cam_output = (cam_output - cam_output.min()) / (cam_output.max() - cam_output.min() + 1e-8)  
+                                    cam_output = np.uint8(255 * cam_output)  
+                                    cam_output = cv2.equalizeHist(cam_output)
+                                    cam_colored = cv2.applyColorMap(cam_output, cv2.COLORMAP_JET)
+                                    
+                                    save_path = os.path.join(save_dir, f"batch_{i}_layer_{j}_prediction_{prediction_name}_grad_cam.jpg")
+                                    save_path_colored = os.path.join(save_dir, f"batch_{i}_layer_{j}_prediction_{prediction_name}_grad_cam_colored.jpg")
+                                    Image.fromarray(cam_output).save(save_path)
+                                    Image.fromarray(cam_colored).save(save_path_colored)
+                            # Print the true label and prediction
+                            true_label_name = class_names[true_label_decode[i].item()]
+                            prediction_name = class_names[prediction]
+                            print(f"Image {i}: True Label = {true_label_name} (ID: {true_label_decode[i].item()}) | Prediction = {prediction_name} (ID: {prediction})")
 
                     
         # if mode == 'test':
