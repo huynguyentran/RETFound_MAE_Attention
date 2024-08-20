@@ -209,8 +209,19 @@ def evaluate(data_loader, model, device, task, epoch, mode, num_class):
     true_label_decode_list = []
     true_label_onehot_list = []
     
+
+    features = {}  # Dictionary to store features**
+
+    def get_features(name):
+        def hook(model, input, output):
+            features[name] = output.detach()
+        return hook
+    model.blocks[-1].norm1.register_forward_hook(get_features('vit_last_block'))
+
     # switch to evaluation mode
     model.eval()
+
+    
 
     for batch in metric_logger.log_every(data_loader, 10, header):
         images = batch[0]
@@ -305,7 +316,32 @@ def evaluate(data_loader, model, device, task, epoch, mode, num_class):
                         'true_label': true_label[i, 0].item(),
                         'highlighted_image': highlighted_image,
                     })
+            
+            if mode == 'test':
+                for idx in range(images.size(0)):
+                    if target[idx].item() == 0:
+                        mean = [0.485, 0.456, 0.406]
+                        std = [0.229, 0.224, 0.225]
+                        denormalized_image = denormalize(images[idx], mean, std)
+                        original_image = denormalized_image.cpu().numpy().transpose(1, 2, 0)
+                        original_image = np.clip(original_image * 255, 0, 255).astype(np.uint8)
 
+                        save_dir = os.path.join(task, 'feature_maps')
+                        os.makedirs(save_dir, exist_ok=True)
+                        original_image_path = os.path.join(save_dir, f"image_batch_{idx}_original.jpg")
+                        Image.fromarray(original_image).save(original_image_path)
+
+                        fig, axes = plt.subplots(4, 4, figsize=(10, 10))
+                        for i, ax in enumerate(axes.flat):
+                            ax.imshow(features['vit_last_block'][idx, i].cpu(), cmap='viridis')
+                            ax.axis('off')
+                        plt.suptitle(f'ViT Last Block Features for Image {idx}')
+
+                        save_path = os.path.join(save_dir, f'image_{idx}_features_pred_{prediction_decode[idx]}.jpg')
+                        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+                        plt.savefig(save_path)
+                        plt.close()
+            
 
     true_label_decode_list = np.array(true_label_decode_list)
     prediction_decode_list = np.array(prediction_decode_list)
