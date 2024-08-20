@@ -212,11 +212,11 @@ def evaluate(data_loader, model, device, task, epoch, mode, num_class):
 
     features = {}  # Dictionary to store features**
 
-    def get_features(name):
-        def hook(model, input, output):
-            features[name] = output.detach()
-        return hook
-    model.blocks[-1].norm1.register_forward_hook(get_features('vit_last_block'))
+    # def get_features(name):
+    #     def hook(model, input, output):
+    #         features[name] = output.detach()
+    #     return hook
+    # model.blocks[-1].norm1.register_forward_hook(get_features('vit_last_block'))
 
     # switch to evaluation mode
     model.eval()
@@ -258,89 +258,98 @@ def evaluate(data_loader, model, device, task, epoch, mode, num_class):
                     save_path = os.path.join(task,'GradCam')
                     with torch.enable_grad():
                         visualize_cam_for_image(model, input_image, target_layer, save_path, device, prediction, i)
+                    print(f"Saved original and Grad-CAM for image {i} with predicted class {prediction}")
 
-        if mode == 'test':
-            results = []
-            save_dir = os.path.join(task,'Lime')
-            for i in range(batch_size):
-                if true_label[i, 0].item() == 0:
-                    input_image = images[i] 
-                    mean = [0.485, 0.456, 0.406]
-                    std = [0.229, 0.224, 0.225]
-                    denormalized_image = denormalize(input_image, mean, std)
-                    original_image = denormalized_image.cpu().numpy()
-                    original_image = original_image.transpose(1, 2, 0).astype(np.float64)
-                    superpixels = skimage.segmentation.quickshift(original_image, kernel_size=4, max_dist=200, ratio=0.2)
-                    num_superpixels = np.unique(superpixels).shape[0]
-                    superpixels = skimage.segmentation.quickshift(original_image, kernel_size=4, max_dist=200, ratio=0.2)
-                    num_superpixels = np.unique(superpixels).shape[0]
-                    predicted_class = prediction_decode[i].item()
-                    num_perturb = 300
-                    perturbations = np.random.binomial(1, 0.5, size=(num_perturb, num_superpixels))
-                    predictions = []
-                    for pert in perturbations:
-                        perturbed_img = perturb_image(original_image, pert, superpixels)
-                        perturbed_img = torch.tensor(perturbed_img, dtype=torch.float32).permute(2, 0, 1).unsqueeze(0).to(device)
-                        with torch.no_grad():
-                            pred = model(perturbed_img)
-                        predictions.append(pred.cpu().numpy())
                     
-                    predictions = np.array(predictions)
-                    original_superpixels = np.ones(num_superpixels)[np.newaxis, :]  
-                    distances = pairwise_distances(perturbations, original_superpixels, metric='cosine').ravel()
-                    kernel_width = 0.25
-                    weights = np.sqrt(np.exp(-(distances**2) / kernel_width**2))  
+        # if mode == 'test':
+        #     results = []
+        #     save_dir = os.path.join(task,'Lime')
+        #     for i in range(batch_size):
+        #         if true_label[i, 0].item() == 0:
+        #             input_image = images[i] 
+        #             mean = [0.485, 0.456, 0.406]
+        #             std = [0.229, 0.224, 0.225]
+        #             denormalized_image = denormalize(input_image, mean, std)
+        #             original_image = denormalized_image.cpu().numpy()
+        #             original_image = original_image.transpose(1, 2, 0).astype(np.float64)
+        #             superpixels = skimage.segmentation.quickshift(original_image, kernel_size=4, max_dist=200, ratio=0.2)
+        #             num_superpixels = np.unique(superpixels).shape[0]
+        #             superpixels = skimage.segmentation.quickshift(original_image, kernel_size=4, max_dist=200, ratio=0.2)
+        #             num_superpixels = np.unique(superpixels).shape[0]
+        #             predicted_class = prediction_decode[i].item()
+        #             num_perturb = 300
+        #             perturbations = np.random.binomial(1, 0.5, size=(num_perturb, num_superpixels))
+        #             predictions = []
+        #             for pert in perturbations:
+        #                 perturbed_img = perturb_image(original_image, pert, superpixels)
+        #                 perturbed_img = torch.tensor(perturbed_img, dtype=torch.float32).permute(2, 0, 1).unsqueeze(0).to(device)
+        #                 with torch.no_grad():
+        #                     pred = model(perturbed_img)
+        #                 predictions.append(pred.cpu().numpy())
                     
-                    simpler_model = LinearRegression()
-                    simpler_model.fit(X=perturbations, y=predictions[:, :, predicted_class], sample_weight=weights)
-                    coeff = simpler_model.coef_[0]
+        #             predictions = np.array(predictions)
+        #             original_superpixels = np.ones(num_superpixels)[np.newaxis, :]  
+        #             distances = pairwise_distances(perturbations, original_superpixels, metric='cosine').ravel()
+        #             kernel_width = 0.25
+        #             weights = np.sqrt(np.exp(-(distances**2) / kernel_width**2))  
                     
-                    num_top_features = 10
-                    top_features = np.argsort(coeff)[-num_top_features:]
+        #             simpler_model = LinearRegression()
+        #             simpler_model.fit(X=perturbations, y=predictions[:, :, predicted_class], sample_weight=weights)
+        #             coeff = simpler_model.coef_[0]
                     
-                    mask = np.zeros(num_superpixels)
-                    mask[top_features] = True  
-                    highlighted_image = perturb_image(original_image, mask, superpixels)
-                    if highlighted_image.max() > 1:
-                        highlighted_image = highlighted_image / 255.0
+        #             num_top_features = 10
+        #             top_features = np.argsort(coeff)[-num_top_features:]
                     
-                    # Save the images
-                    skimage.io.imsave(os.path.join(save_dir, f'batch_{i}_prediction_{predicted_class}_superpixels.png'),
-                                        skimage.segmentation.mark_boundaries(original_image / 2 + 0.5, superpixels))
+        #             mask = np.zeros(num_superpixels)
+        #             mask[top_features] = True  
+        #             highlighted_image = perturb_image(original_image, mask, superpixels)
+        #             if highlighted_image.max() > 1:
+        #                 highlighted_image = highlighted_image / 255.0
+                    
+        #             # Save the images
+        #             skimage.io.imsave(os.path.join(save_dir, f'batch_{i}_prediction_{predicted_class}_superpixels.png'),
+        #                                 skimage.segmentation.mark_boundaries(original_image / 2 + 0.5, superpixels))
 
-                    skimage.io.imsave(os.path.join(save_dir, f'batch_{i}_prediction_{predicted_class}_highlighted.png'), highlighted_image)
+        #             skimage.io.imsave(os.path.join(save_dir, f'batch_{i}_prediction_{predicted_class}_highlighted.png'), highlighted_image)
 
-                    results.append({
-                        'image': i,
-                        'predicted_class': predicted_class,
-                        'true_label': true_label[i, 0].item(),
-                        'highlighted_image': highlighted_image,
-                    })
+        #             results.append({
+        #                 'image': i,
+        #                 'predicted_class': predicted_class,
+        #                 'true_label': true_label[i, 0].item(),
+        #                 'highlighted_image': highlighted_image,
+        #             })
             
-        if mode == 'test':
-            for idx in range(images.size(0)):
-                if target[idx].item() == 0:
-                    mean = [0.485, 0.456, 0.406]
-                    std = [0.229, 0.224, 0.225]
-                    denormalized_image = denormalize(images[idx], mean, std)
-                    original_image = denormalized_image.cpu().numpy().transpose(1, 2, 0)
-                    original_image = np.clip(original_image * 255, 0, 255).astype(np.uint8)
+        # if mode == 'test':
+        #     for i in range(batch_size):
+        #         if true_label[i, 0].item() == 0:  # Change this condition as needed
+        #             mean = [0.485, 0.456, 0.406]
+        #             std = [0.229, 0.224, 0.225]
+        #             input_image = images[i]
+        #             save_dir = os.path.join(task, 'features')
+        #             os.makedirs(save_dir, exist_ok=True)
 
-                    save_dir = os.path.join(task, 'feature_maps')
-                    os.makedirs(save_dir, exist_ok=True)
-                    original_image_path = os.path.join(save_dir, f"image_batch_{idx}_original.jpg")
-                    Image.fromarray(original_image).save(original_image_path)
+        #             # Save original image
+        #             denormalized_image = denormalize(input_image, mean, std)
+        #             original_image = denormalized_image.cpu().numpy().transpose(1, 2, 0)
+        #             original_image = np.clip(original_image * 255, 0, 255).astype(np.uint8)
+        #             original_image_path = os.path.join(save_dir, f"image_batch_{i}_original.jpg")
+        #             Image.fromarray(original_image).save(original_image_path)
 
-                    fig, axes = plt.subplots(4, 4, figsize=(10, 10))
-                    for i, ax in enumerate(axes.flat):
-                        ax.imshow(features['vit_last_block'][idx, i].cpu(), cmap='viridis')
-                        ax.axis('off')
-                    plt.suptitle(f'ViT Last Block Features for Image {idx}')
+        #             # Save feature maps as individual images
+        #             feature_maps = features['vit_last_block'][i].cpu().numpy()
+        #             for j, feature_map in enumerate(feature_maps):
+        #                 # Normalize each feature map to [0, 1] range
+        #                 feature_map = (feature_map - np.min(feature_map)) / (np.max(feature_map) - np.min(feature_map))
+        #                 feature_map = (feature_map * 255).astype(np.uint8)  # Scale to [0, 255]
 
-                    save_path = os.path.join(save_dir, f'image_{idx}_features_pred_{prediction_decode[idx]}.jpg')
-                    os.makedirs(os.path.dirname(save_path), exist_ok=True)
-                    plt.savefig(save_path)
-                    plt.close()
+        #                 # Save the feature map as an image
+        #                 feature_map_image = Image.fromarray(feature_map)
+        #                 feature_map_path = os.path.join(save_dir, f"image_{i}_feature_{j}.jpg")
+        #                 feature_map_image.save(feature_map_path)
+
+        #             predicted_class = prediction_decode[i].item()
+        #             print(f"Saved features and original image for image {i} with predicted class {predicted_class}")
+    
         
 
     true_label_decode_list = np.array(true_label_decode_list)
