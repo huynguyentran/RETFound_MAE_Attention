@@ -274,13 +274,13 @@ def evaluate(data_loader, model, device, task, epoch, mode, num_class):
                             original_image = np.clip(original_image * 255, 0, 255).astype(np.uint8)  
                             os.makedirs(save_dir, exist_ok=True)
 
-                            original_image_path = os.path.join(save_dir, f"batch_{i}_orginal_label_{prediction_name}.jpg")
+                            original_image_path = os.path.join(save_dir, f"batch_{i}_orginal_label_{true_label_name}.jpg")
                             Image.fromarray(original_image).save(original_image_path)
 
 
 
                             for j in [23]:
-                                target_layer = [model.module.blocks[j].norm1]
+                                target_layer = [model.module.blocks[j].attn]
                                 cam = GradCAM(model=model, target_layers=target_layer, reshape_transform=reshape_transform, use_cuda=device.type == 'cuda')
                                 cam_output = cam(input_tensor=input_tensor)
                                 if cam_output[0].max() != cam_output[0].min():
