@@ -148,11 +148,16 @@ def reshape_transform(tensor, height=14, width=14):
     return result
 
 
-def denormalize(tensor, mean, std):
-    mean = torch.tensor(mean).view(3, 1, 1).to(tensor.device)  # Shape (3, 1, 1)
-    std = torch.tensor(std).view(3, 1, 1).to(tensor.device)    # Shape (3, 1, 1)
-    return tensor * std + mean
+# def denormalize(tensor, mean, std):
+#     mean = torch.tensor(mean).view(3, 1, 1).to(tensor.device)  # Shape (3, 1, 1)
+#     std = torch.tensor(std).view(3, 1, 1).to(tensor.device)    # Shape (3, 1, 1)
+#     return tensor * std + mean
 
+
+def denormalize(image, mean, std):
+    mean = np.array(mean).reshape(1, 1, 3)
+    std = np.array(std).reshape(1, 1, 3)
+    return image * std + mean
 
 def visualize_cam_for_image(model, input_image, target_layer, save_dir, device, prediction, batch_idx):
     mean = [0.485, 0.456, 0.406]
@@ -253,111 +258,110 @@ def evaluate(data_loader, model, device, task, epoch, mode, num_class):
         metric_logger.update(loss=loss.item())
         metric_logger.meters['acc1'].update(acc1.item(), n=batch_size)
 
-        if mode == 'test':
-            with torch.enable_grad():
-                save_dir = os.path.join(task, 'GradCam')
-                for i in range(batch_size):
-                    if true_label_decode[i].item() == 0:  # Check if true label is 0
-                        input_image = images[i]  # Add batch dimension
-                        prediction = prediction_decode[i].item()
-
-                        true_label_name = class_names[true_label_decode[i].item()]
-                        prediction_name = class_names[prediction]
-                        # Run Grad-CAM for each target layer
-                        if true_label_name == '2SKA_Suspected_Glaucoma':
-                            mean = [0.485, 0.456, 0.406]
-                            std = [0.229, 0.224, 0.225]
-                            denormalized_image = denormalize(input_image, mean, std)
-
-                            input_tensor = input_image.unsqueeze(0).to(device)  
-                            original_image = denormalized_image.cpu().numpy().transpose(1, 2, 0)  
-                            original_image = np.clip(original_image * 255, 0, 255).astype(np.uint8)  
-                            os.makedirs(save_dir, exist_ok=True)
-
-                            original_image_path = os.path.join(save_dir, f"batch_{i}_orginal_label_{true_label_name}.jpg")
-                            Image.fromarray(original_image).save(original_image_path)
-
-
-
-                            for j in [23]:
-                                target_layer = [model.module.blocks[j].attn]
-                                cam = GradCAM(model=model, target_layers=target_layer, reshape_transform=reshape_transform, use_cuda=device.type == 'cuda')
-                                cam_output = cam(input_tensor=input_tensor)
-                                if cam_output[0].max() != cam_output[0].min():
-                                    cam_output = cam_output[0]
-                                    
-                                    cam_output = (cam_output - cam_output.min()) / (cam_output.max() - cam_output.min() + 1e-8)  
-                                    cam_output = np.uint8(255 * cam_output)  
-                                    cam_output = cv2.equalizeHist(cam_output)
-                                    cam_colored = cv2.applyColorMap(cam_output, cv2.COLORMAP_JET)
-                                    
-                                    save_path = os.path.join(save_dir, f"batch_{i}_layer_{j}_prediction_{prediction_name}_grad_cam.jpg")
-                                    save_path_colored = os.path.join(save_dir, f"batch_{i}_layer_{j}_prediction_{prediction_name}_grad_cam_colored.jpg")
-                                    Image.fromarray(cam_output).save(save_path)
-                                    Image.fromarray(cam_colored).save(save_path_colored)
-                            # Print the true label and prediction
-                            true_label_name = class_names[true_label_decode[i].item()]
-                            prediction_name = class_names[prediction]
-                            print(f"Image {i}: True Label = {true_label_name} (ID: {true_label_decode[i].item()}) | Prediction = {prediction_name} (ID: {prediction})")
-
-                    
         # if mode == 'test':
-        #     results = []
-        #     save_dir = os.path.join(task,'Lime')
-        #     for i in range(batch_size):
-        #         if true_label[i, 0].item() == 0:
-        #             input_image = images[i] 
-        #             mean = [0.485, 0.456, 0.406]
-        #             std = [0.229, 0.224, 0.225]
-        #             denormalized_image = denormalize(input_image, mean, std)
-        #             original_image = denormalized_image.cpu().numpy()
-        #             original_image = original_image.transpose(1, 2, 0).astype(np.float64)
-        #             superpixels = skimage.segmentation.quickshift(original_image, kernel_size=4, max_dist=200, ratio=0.2)
-        #             num_superpixels = np.unique(superpixels).shape[0]
-        #             superpixels = skimage.segmentation.quickshift(original_image, kernel_size=4, max_dist=200, ratio=0.2)
-        #             num_superpixels = np.unique(superpixels).shape[0]
-        #             predicted_class = prediction_decode[i].item()
-        #             num_perturb = 300
-        #             perturbations = np.random.binomial(1, 0.5, size=(num_perturb, num_superpixels))
-        #             predictions = []
-        #             for pert in perturbations:
-        #                 perturbed_img = perturb_image(original_image, pert, superpixels)
-        #                 perturbed_img = torch.tensor(perturbed_img, dtype=torch.float32).permute(2, 0, 1).unsqueeze(0).to(device)
-        #                 with torch.no_grad():
-        #                     pred = model(perturbed_img)
-        #                 predictions.append(pred.cpu().numpy())
-                    
-        #             predictions = np.array(predictions)
-        #             original_superpixels = np.ones(num_superpixels)[np.newaxis, :]  
-        #             distances = pairwise_distances(perturbations, original_superpixels, metric='cosine').ravel()
-        #             kernel_width = 0.25
-        #             weights = np.sqrt(np.exp(-(distances**2) / kernel_width**2))  
-                    
-        #             simpler_model = LinearRegression()
-        #             simpler_model.fit(X=perturbations, y=predictions[:, :, predicted_class], sample_weight=weights)
-        #             coeff = simpler_model.coef_[0]
-                    
-        #             num_top_features = 10
-        #             top_features = np.argsort(coeff)[-num_top_features:]
-                    
-        #             mask = np.zeros(num_superpixels)
-        #             mask[top_features] = True  
-        #             highlighted_image = perturb_image(original_image, mask, superpixels)
-        #             if highlighted_image.max() > 1:
-        #                 highlighted_image = highlighted_image / 255.0
-                    
-        #             # Save the images
-        #             skimage.io.imsave(os.path.join(save_dir, f'batch_{i}_prediction_{predicted_class}_superpixels.png'),
-        #                                 skimage.segmentation.mark_boundaries(original_image / 2 + 0.5, superpixels))
+        #     with torch.enable_grad():
+        #         save_dir = os.path.join(task, 'GradCam')
+        #         for i in range(batch_size):
+        #             if true_label_decode[i].item() == 0:  # Check if true label is 0
+        #                 input_image = images[i]  # Add batch dimension
+        #                 prediction = prediction_decode[i].item()
 
-        #             skimage.io.imsave(os.path.join(save_dir, f'batch_{i}_prediction_{predicted_class}_highlighted.png'), highlighted_image)
+        #                 true_label_name = class_names[true_label_decode[i].item()]
+        #                 prediction_name = class_names[prediction]
+        #                 # Run Grad-CAM for each target layer
+        #                 if true_label_name == '2SKA_Suspected_Glaucoma':
+        #                     mean = [0.485, 0.456, 0.406]
+        #                     std = [0.229, 0.224, 0.225]
+        #                     denormalized_image = denormalize(input_image, mean, std)
 
-        #             results.append({
-        #                 'image': i,
-        #                 'predicted_class': predicted_class,
-        #                 'true_label': true_label[i, 0].item(),
-        #                 'highlighted_image': highlighted_image,
-        #             })
+        #                     input_tensor = input_image.unsqueeze(0).to(device)  
+        #                     original_image = denormalized_image.cpu().numpy().transpose(1, 2, 0)  
+        #                     original_image = np.clip(original_image * 255, 0, 255).astype(np.uint8)  
+        #                     os.makedirs(save_dir, exist_ok=True)
+
+        #                     original_image_path = os.path.join(save_dir, f"batch_{i}_orginal_label_{true_label_name}.jpg")
+        #                     Image.fromarray(original_image).save(original_image_path)
+
+
+
+        #                     for j in [23]:
+        #                         target_layer = [model.module.blocks[j].attn]
+        #                         cam = GradCAM(model=model, target_layers=target_layer, reshape_transform=reshape_transform, use_cuda=device.type == 'cuda')
+        #                         cam_output = cam(input_tensor=input_tensor)
+        #                         if cam_output[0].max() != cam_output[0].min():
+        #                             cam_output = cam_output[0]
+                                    
+        #                             cam_output = (cam_output - cam_output.min()) / (cam_output.max() - cam_output.min() + 1e-8)  
+        #                             cam_output = np.uint8(255 * cam_output)  
+        #                             cam_output = cv2.equalizeHist(cam_output)
+        #                             cam_colored = cv2.applyColorMap(cam_output, cv2.COLORMAP_JET)
+                                    
+        #                             save_path = os.path.join(save_dir, f"batch_{i}_layer_{j}_prediction_{prediction_name}_grad_cam.jpg")
+        #                             save_path_colored = os.path.join(save_dir, f"batch_{i}_layer_{j}_prediction_{prediction_name}_grad_cam_colored.jpg")
+        #                             Image.fromarray(cam_output).save(save_path)
+        #                             Image.fromarray(cam_colored).save(save_path_colored)
+        #                     # Print the true label and prediction
+        #                     true_label_name = class_names[true_label_decode[i].item()]
+        #                     prediction_name = class_names[prediction]
+        #                     print(f"Image {i}: True Label = {true_label_name} (ID: {true_label_decode[i].item()}) | Prediction = {prediction_name} (ID: {prediction})")
+
+                    
+        if mode == 'test':
+            results = []
+            save_dir = os.path.join(task, 'Lime')
+            for i in range(batch_size):
+                if true_label[i, 0].item() == 0:
+                    input_image = images[i]
+                    mean = [0.485, 0.456, 0.406]
+                    std = [0.229, 0.224, 0.225]
+                    denormalized_image = denormalize(input_image.permute(1, 2, 0).cpu().numpy(), mean, std)
+                    denormalized_image = np.clip(denormalized_image, 0, 1)  # Clip values to [0, 1]
+                    
+                    superpixels = skimage.segmentation.quickshift(denormalized_image, kernel_size=4, max_dist=200, ratio=0.2)
+                    num_superpixels = np.unique(superpixels).shape[0]
+                    
+                    predicted_class = prediction_decode[i].item()
+                    num_perturb = 300
+                    perturbations = np.random.binomial(1, 0.5, size=(num_perturb, num_superpixels))
+                    predictions = []
+                    for pert in perturbations:
+                        perturbed_img = perturb_image(denormalized_image, pert, superpixels)
+                        perturbed_img = torch.tensor(perturbed_img, dtype=torch.float32).permute(2, 0, 1).unsqueeze(0).to(device)
+                        with torch.no_grad():
+                            pred = model(perturbed_img)
+                        predictions.append(pred.cpu().numpy())
+
+                    predictions = np.array(predictions)
+                    original_superpixels = np.ones(num_superpixels)[np.newaxis, :]
+                    distances = pairwise_distances(perturbations, original_superpixels, metric='cosine').ravel()
+                    kernel_width = 0.25
+                    weights = np.sqrt(np.exp(-(distances**2) / kernel_width**2))
+
+                    simpler_model = LinearRegression()
+                    simpler_model.fit(X=perturbations, y=predictions[:, :, predicted_class], sample_weight=weights)
+                    coeff = simpler_model.coef_[0]
+
+                    num_top_features = 10
+                    top_features = np.argsort(coeff)[-num_top_features:]
+
+                    mask = np.zeros(num_superpixels)
+                    mask[top_features] = True
+                    highlighted_image = perturb_image(denormalized_image, mask, superpixels)
+                    if highlighted_image.max() > 1:
+                        highlighted_image = highlighted_image / 255.0
+
+                    # Save the images
+                    skimage.io.imsave(os.path.join(save_dir, f'batch_{i}_prediction_{predicted_class}_superpixels.png'),
+                                    skimage.segmentation.mark_boundaries(denormalized_image, superpixels))
+
+                    skimage.io.imsave(os.path.join(save_dir, f'batch_{i}_prediction_{predicted_class}_highlighted.png'), highlighted_image)
+
+                    results.append({
+                        'image': i,
+                        'predicted_class': predicted_class,
+                        'true_label': true_label[i, 0].item(),
+                        'highlighted_image': highlighted_image,
+                    })
             
         # if mode == 'test':
         #     for i in range(batch_size):
