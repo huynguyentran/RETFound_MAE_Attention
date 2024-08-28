@@ -236,14 +236,14 @@ def lime(task, indices_of_corrects, dataset, model, device):
         original_image = np.array(original_image) / 255.0
         
         # superpixels = skimage.segmentation.quickshift(denormalized_image, kernel_size=4, max_dist=200, ratio=0.2)
-        superpixels = skimage.segmentation.quickshift(img_224x224, kernel_size=10, max_dist=200, ratio=0.2)
+        superpixels = skimage.segmentation.quickshift(img_224x224, kernel_size=6, max_dist=200, ratio=0.2)
         num_superpixels = np.unique(superpixels).shape[0]
 
         print(f"Superpixels shape: {superpixels.shape}")
         print(f"Number of unique superpixels: {num_superpixels}")
 
         predicted_class = 0
-        num_perturb = 500
+        num_perturb = 300
         perturbations = np.random.binomial(1, 0.5, size=(num_perturb, num_superpixels))
 
         print(f"Perturbations shape: {perturbations.shape}")
