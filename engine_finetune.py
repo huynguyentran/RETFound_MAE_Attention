@@ -197,8 +197,63 @@ def perturb_image(img, perturbation, segments):
     perturbed_image = perturbed_image * mask[:, :, np.newaxis]
     return perturbed_image
 
+def lime(task, indices_of_corrects, dataset, model, device):
+    results = []
+    save_dir = os.path.join(task, 'Lime')
+    for i in indices_of_corrects:                 
+        image_path = dataset.imgs[i][0]  
+        original_image = Image.open(image_path).convert('RGB')
+        original_image = np.array(original_image) / 255.0  
+        
+        # superpixels = skimage.segmentation.quickshift(denormalized_image, kernel_size=4, max_dist=200, ratio=0.2)
+        superpixels = skimage.segmentation.quickshift(original_image, kernel_size=10, max_dist=200, ratio=0.2)
+        num_superpixels = np.unique(superpixels).shape[0]
+        
+        predicted_class = 0
+        num_perturb = 300
+        perturbations = np.random.binomial(1, 0.5, size=(num_perturb, num_superpixels))
 
+        predictions = []
+        for pert in perturbations:
+            perturbed_img = perturb_image(original_image, pert, superpixels)
+            perturbed_img = torch.tensor(perturbed_img, dtype=torch.float32).permute(2, 0, 1).unsqueeze(0).to(device)
+            with torch.no_grad():
+                pred = model(perturbed_img)
+            predictions.append(pred.cpu().numpy())
 
+        predictions = np.array(predictions)
+        original_superpixels = np.ones(num_superpixels)[np.newaxis, :]
+        distances = pairwise_distances(perturbations, original_superpixels, metric='cosine').ravel()
+        kernel_width = 0.25
+        weights = np.sqrt(np.exp(-(distances**2) / kernel_width**2))
+
+        simpler_model = LinearRegression()
+        simpler_model.fit(X=perturbations, y=predictions[:, :, predicted_class], sample_weight=weights)
+        coeff = simpler_model.coef_[0]
+
+        num_top_features = 10
+        top_features = np.argsort(coeff)[-num_top_features:]
+
+        mask = np.zeros(num_superpixels)
+        mask[top_features] = True
+        highlighted_image = perturb_image(original_image, mask, superpixels)
+        if highlighted_image.max() > 1:
+            highlighted_image = highlighted_image / 255.0
+
+        # Save the images
+        skimage.io.imsave(os.path.join(save_dir, f'batch_{i}_prediction_{predicted_class}_superpixels.png'),
+                        skimage.segmentation.mark_boundaries(original_image, superpixels))
+
+        skimage.io.imsave(os.path.join(save_dir, f'batch_{i}_prediction_{predicted_class}_highlighted.png'), highlighted_image)
+
+        results.append({
+            'image': i,
+            'predicted_class': predicted_class,
+            'true_label': "Glaucoma",
+            'highlighted_image': highlighted_image,
+        })
+        exit()
+        
 @torch.no_grad()
 def evaluate(data_loader, model, device, task, epoch, mode, num_class):
     criterion = torch.nn.CrossEntropyLoss()
@@ -225,6 +280,8 @@ def evaluate(data_loader, model, device, task, epoch, mode, num_class):
     dataset = data_loader.dataset
     class_names = dataset.classes  # List of class names
     print(class_names)
+    for idx, class_name in enumerate(class_names):
+        print(f"Class index {idx}: {class_name}")
 
 
     # switch to evaluation mode
@@ -305,65 +362,7 @@ def evaluate(data_loader, model, device, task, epoch, mode, num_class):
         #                     prediction_name = class_names[prediction]
         #                     print(f"Image {i}: True Label = {true_label_name} (ID: {true_label_decode[i].item()}) | Prediction = {prediction_name} (ID: {prediction})")
 
-                    
-        if mode == 'test':
-            results = []
-            save_dir = os.path.join(task, 'Lime')
-            for i in range(batch_size):
-                true_label_name = class_names[true_label_decode[i].item()]
-                prediction = class_names[prediction_decode[i].item()]
-                if true_label_name == "Glaucoma" and prediction=="Glaucoma":
-                    image_path = dataset.imgs[i][0]  # Assuming the dataset uses ImageFolder
-                    original_image = Image.open(image_path).convert('RGB')
-                    original_image = np.array(original_image) / 255.0  # Normalize to [0, 1]
-                    
-                    # superpixels = skimage.segmentation.quickshift(denormalized_image, kernel_size=4, max_dist=200, ratio=0.2)
-                    superpixels = skimage.segmentation.quickshift(original_image, kernel_size=10, max_dist=200, ratio=0.2)
-                    num_superpixels = np.unique(superpixels).shape[0]
-                    
-                    predicted_class = prediction_decode[i].item()
-                    num_perturb = 500
-                    perturbations = np.random.binomial(1, 0.5, size=(num_perturb, num_superpixels))
-                    predictions = []
-                    for pert in perturbations:
-                        perturbed_img = perturb_image(original_image, pert, superpixels)
-                        perturbed_img = torch.tensor(perturbed_img, dtype=torch.float32).permute(2, 0, 1).unsqueeze(0).to(device)
-                        with torch.no_grad():
-                            pred = model(perturbed_img)
-                        predictions.append(pred.cpu().numpy())
-
-                    predictions = np.array(predictions)
-                    original_superpixels = np.ones(num_superpixels)[np.newaxis, :]
-                    distances = pairwise_distances(perturbations, original_superpixels, metric='cosine').ravel()
-                    kernel_width = 0.25
-                    weights = np.sqrt(np.exp(-(distances**2) / kernel_width**2))
-
-                    simpler_model = LinearRegression()
-                    simpler_model.fit(X=perturbations, y=predictions[:, :, predicted_class], sample_weight=weights)
-                    coeff = simpler_model.coef_[0]
-
-                    num_top_features = 10
-                    top_features = np.argsort(coeff)[-num_top_features:]
-
-                    mask = np.zeros(num_superpixels)
-                    mask[top_features] = True
-                    highlighted_image = perturb_image(original_image, mask, superpixels)
-                    if highlighted_image.max() > 1:
-                        highlighted_image = highlighted_image / 255.0
-
-                    # Save the images
-                    skimage.io.imsave(os.path.join(save_dir, f'batch_{i}_prediction_{predicted_class}_superpixels.png'),
-                                    skimage.segmentation.mark_boundaries(original_image, superpixels))
-
-                    skimage.io.imsave(os.path.join(save_dir, f'batch_{i}_prediction_{predicted_class}_highlighted.png'), highlighted_image)
-
-                    results.append({
-                        'image': i,
-                        'predicted_class': predicted_class,
-                        'true_label': true_label[i, 0].item(),
-                        'highlighted_image': highlighted_image,
-                    })
-                    exit()
+           
             
         # if mode == 'test':
         #     for i in range(batch_size):
@@ -395,11 +394,15 @@ def evaluate(data_loader, model, device, task, epoch, mode, num_class):
 
         #             predicted_class = prediction_decode[i].item()
         #             print(f"Saved features and original image for image {i} with predicted class {predicted_class}")
-    
-        
+   
 
     true_label_decode_list = np.array(true_label_decode_list)
     prediction_decode_list = np.array(prediction_decode_list)
+
+    indices_of_corrects = np.where((true_label_decode_list == 0) & (prediction_decode_list == 0))[0]
+ 
+    lime(task, indices_of_corrects, dataset, model, device)
+
     confusion_matrix = multilabel_confusion_matrix(true_label_decode_list, prediction_decode_list,labels=[i for i in range(num_class)])
     acc, sensitivity, specificity, precision, G, F1, mcc = misc_measures(confusion_matrix)
     
