@@ -313,14 +313,12 @@ def evaluate(data_loader, model, device, task, epoch, mode, num_class):
                 true_label_name = class_names[true_label_decode[i].item()]
                 prediction = class_names[prediction_decode[i].item()]
                 if true_label_name == "Glaucoma" and prediction=="Glaucoma":
-                    input_image = images[i]
-                    mean = [0.485, 0.456, 0.406]
-                    std = [0.229, 0.224, 0.225]
-                    denormalized_image = denormalize(input_image.permute(1, 2, 0).cpu().numpy(), mean, std)
-                    denormalized_image = np.clip(denormalized_image, 0, 1)  # Clip values to [0, 1]
+                    image_path = dataset.imgs[i][0]  # Assuming the dataset uses ImageFolder
+                    original_image = Image.open(image_path).convert('RGB')
+                    original_image = np.array(original_image) / 255.0  # Normalize to [0, 1]
                     
                     # superpixels = skimage.segmentation.quickshift(denormalized_image, kernel_size=4, max_dist=200, ratio=0.2)
-                    superpixels = skimage.segmentation.quickshift(denormalized_image, kernel_size=10, max_dist=200, ratio=0.2)
+                    superpixels = skimage.segmentation.quickshift(original_image, kernel_size=10, max_dist=200, ratio=0.2)
                     num_superpixels = np.unique(superpixels).shape[0]
                     
                     predicted_class = prediction_decode[i].item()
@@ -328,7 +326,7 @@ def evaluate(data_loader, model, device, task, epoch, mode, num_class):
                     perturbations = np.random.binomial(1, 0.5, size=(num_perturb, num_superpixels))
                     predictions = []
                     for pert in perturbations:
-                        perturbed_img = perturb_image(denormalized_image, pert, superpixels)
+                        perturbed_img = perturb_image(original_image, pert, superpixels)
                         perturbed_img = torch.tensor(perturbed_img, dtype=torch.float32).permute(2, 0, 1).unsqueeze(0).to(device)
                         with torch.no_grad():
                             pred = model(perturbed_img)
@@ -349,13 +347,13 @@ def evaluate(data_loader, model, device, task, epoch, mode, num_class):
 
                     mask = np.zeros(num_superpixels)
                     mask[top_features] = True
-                    highlighted_image = perturb_image(denormalized_image, mask, superpixels)
+                    highlighted_image = perturb_image(original_image, mask, superpixels)
                     if highlighted_image.max() > 1:
                         highlighted_image = highlighted_image / 255.0
 
                     # Save the images
                     skimage.io.imsave(os.path.join(save_dir, f'batch_{i}_prediction_{predicted_class}_superpixels.png'),
-                                    skimage.segmentation.mark_boundaries(denormalized_image, superpixels))
+                                    skimage.segmentation.mark_boundaries(original_image, superpixels))
 
                     skimage.io.imsave(os.path.join(save_dir, f'batch_{i}_prediction_{predicted_class}_highlighted.png'), highlighted_image)
 
