@@ -20,8 +20,9 @@ from pycm import *
 import matplotlib.pyplot as plt
 import numpy as np
 import torchvision.transforms as transforms
+from skimage.transform import resize
 import skimage.io 
-import skimage.segmentation
+from skimage import io, transform, segmentation
 from pytorch_grad_cam import GradCAM, HiResCAM, ScoreCAM, GradCAMPlusPlus, AblationCAM, XGradCAM, EigenCAM, FullGrad
 from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
 from pytorch_grad_cam.utils.image import show_cam_on_image, scale_cam_image
@@ -197,61 +198,136 @@ def perturb_image(img, perturbation, segments):
     perturbed_image = perturbed_image * mask[:, :, np.newaxis]
     return perturbed_image
 
+def scale_up_image(image, target_size):
+    """
+    Scale up the image to the target size using interpolation.
+    
+    Args:
+    - image (numpy array): The input image to be scaled up.
+    - target_size (tuple): The target size (height, width).
+    
+    Returns:
+    - numpy array: The scaled-up image.
+    """
+    scaled_image = transform.resize(image, target_size, mode='reflect', anti_aliasing=True)
+    return (scaled_image * 255).astype(np.uint8)
+
+
 def lime(task, indices_of_corrects, dataset, model, device):
     results = []
     save_dir = os.path.join(task, 'Lime')
+    os.makedirs(save_dir, exist_ok=True)
+
+    mean = np.array([0.485, 0.456, 0.406])
+    std = np.array([0.229, 0.224, 0.225])
+
     for i in indices_of_corrects:                 
-        image_path = dataset.imgs[i][0]  
-        original_image = Image.open(image_path).convert('RGB')
-        original_image = np.array(original_image) / 255.0  
+        img_224x224 = dataset[i][0]  # Assuming the dataset object provides the transformed image
+        
+        # Convert 224x224 image to numpy array
+        img_224x224 = img_224x224.permute(1, 2, 0).cpu().numpy()
+        img_224x224 = img_224x224 * std + mean  # Denormalize
+        img_224x224 = (img_224x224 * 255).astype(np.uint8)
+        print(f"Original 224x224 image shape: {img_224x224.shape}")
+
+        # Get the original image
+        original_image_path = dataset.imgs[i][0]
+        original_image = Image.open(original_image_path).convert('RGB')
+        original_image = np.array(original_image) / 255.0
         
         # superpixels = skimage.segmentation.quickshift(denormalized_image, kernel_size=4, max_dist=200, ratio=0.2)
-        superpixels = skimage.segmentation.quickshift(original_image, kernel_size=10, max_dist=200, ratio=0.2)
+        superpixels = skimage.segmentation.quickshift(img_224x224, kernel_size=10, max_dist=200, ratio=0.2)
         num_superpixels = np.unique(superpixels).shape[0]
-        
+
+        print(f"Superpixels shape: {superpixels.shape}")
+        print(f"Number of unique superpixels: {num_superpixels}")
+
         predicted_class = 0
-        num_perturb = 300
+        num_perturb = 500
         perturbations = np.random.binomial(1, 0.5, size=(num_perturb, num_superpixels))
+
+        print(f"Perturbations shape: {perturbations.shape}")
 
         predictions = []
         for pert in perturbations:
-            perturbed_img = perturb_image(original_image, pert, superpixels)
+            perturbed_img = perturb_image(img_224x224, pert, superpixels)
             perturbed_img = torch.tensor(perturbed_img, dtype=torch.float32).permute(2, 0, 1).unsqueeze(0).to(device)
             with torch.no_grad():
                 pred = model(perturbed_img)
             predictions.append(pred.cpu().numpy())
 
         predictions = np.array(predictions)
-        original_superpixels = np.ones(num_superpixels)[np.newaxis, :]
+        original_superpixels = np.ones(num_superpixels)[np.newaxis, :]  
         distances = pairwise_distances(perturbations, original_superpixels, metric='cosine').ravel()
         kernel_width = 0.25
-        weights = np.sqrt(np.exp(-(distances**2) / kernel_width**2))
+        weights = np.sqrt(np.exp(-(distances**2) / kernel_width**2))  
 
         simpler_model = LinearRegression()
         simpler_model.fit(X=perturbations, y=predictions[:, :, predicted_class], sample_weight=weights)
         coeff = simpler_model.coef_[0]
 
-        num_top_features = 10
+        num_top_features = 5
         top_features = np.argsort(coeff)[-num_top_features:]
 
-        mask = np.zeros(num_superpixels)
+        mask = np.zeros(num_superpixels, dtype=bool)
         mask[top_features] = True
-        highlighted_image = perturb_image(original_image, mask, superpixels)
+
+        # Print mask shape and top features
+        print(f"Mask shape: {mask.shape}")
+        print(f"Top features indices: {top_features}")
+
+        mask_224x224 = np.zeros(img_224x224.shape[:2], dtype=bool)
+        for sp in range(num_superpixels):
+            mask_224x224[superpixels == sp] = mask[sp]
+
+        # Scale up the mask to the original image size
+        scaled_mask = transform.resize(mask_224x224, 
+                                      (original_image.shape[0], original_image.shape[1]), 
+                                      order=0,  # Nearest-neighbor for binary mask
+                                      mode='reflect',
+                                      anti_aliasing=False)
+        scaled_mask = scaled_mask > 0.5
+
+        # Apply mask to 224x224 image
+        highlighted_image = perturb_image(img_224x224, mask, superpixels)
         if highlighted_image.max() > 1:
             highlighted_image = highlighted_image / 255.0
 
-        # Save the images
-        skimage.io.imsave(os.path.join(save_dir, f'batch_{i}_prediction_{predicted_class}_superpixels.png'),
-                        skimage.segmentation.mark_boundaries(original_image, superpixels))
+        # Apply mask to the original image
+        highlighted_original_image = original_image.copy()
+        highlighted_original_image[scaled_mask] = original_image[scaled_mask] * 0.5
 
-        skimage.io.imsave(os.path.join(save_dir, f'batch_{i}_prediction_{predicted_class}_highlighted.png'), highlighted_image)
+        original_height, original_width, _ = original_image.shape
+        target_size = (min(original_height, 1024), min(original_width, 1024))
+        io.imsave(os.path.join(save_dir, 'original_image.png'), (original_image * 255).astype(np.uint8))
+
+        io.imsave(os.path.join(save_dir, f'batch_{i}_prediction_{predicted_class}_superpixels_224x224.png'),
+              segmentation.mark_boundaries(img_224x224 / 255.0, superpixels))
+        io.imsave(os.path.join(save_dir, f'batch_{i}_prediction_{predicted_class}_highlighted_224x224.png'), 
+                  highlighted_image)
+        
+
+        scaled_superpixels = scale_up_image(segmentation.mark_boundaries(img_224x224 / 255.0, superpixels), target_size)
+        scaled_highlighted_image = scale_up_image(highlighted_image, target_size)
+
+        # Save scaled-up images
+        io.imsave(os.path.join(save_dir, f'batch_{i}_prediction_{predicted_class}_superpixels_{target_size[0]}x{target_size[1]}.png'), scaled_superpixels)
+        io.imsave(os.path.join(save_dir, f'batch_{i}_prediction_{predicted_class}_highlighted_{target_size[0]}x{target_size[1]}.png'), scaled_highlighted_image)
 
         results.append({
             'image': i,
             'predicted_class': predicted_class,
-            'true_label': "Glaucoma",
             'highlighted_image': highlighted_image,
         })
+            
+
+
+          # Save the images
+        # skimage.io.imsave(os.path.join(save_dir, f'batch_{i}_prediction_{predicted_class}_superpixels.png'),
+        #                     segmentation.mark_boundaries(img_224x224/ 2 + 0.5, superpixels))
+
+        # skimage.io.imsave(os.path.join(save_dir, f'batch_{i}_prediction_{predicted_class}_highlighted.png'), highlighted_image)
+
         exit()
         
 @torch.no_grad()
