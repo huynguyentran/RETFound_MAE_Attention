@@ -224,7 +224,7 @@ def evaluate(data_loader, model, device, task, epoch, mode, num_class):
     # model.blocks[-1].norm1.register_forward_hook(get_features('vit_last_block'))
     dataset = data_loader.dataset
     class_names = dataset.classes  # List of class names
-
+    print(class_names)
 
 
     # switch to evaluation mode
@@ -310,18 +310,21 @@ def evaluate(data_loader, model, device, task, epoch, mode, num_class):
             results = []
             save_dir = os.path.join(task, 'Lime')
             for i in range(batch_size):
-                if true_label[i, 0].item() == 0:
+                true_label_name = class_names[true_label_decode[i].item()]
+                prediction = class_names[prediction_decode[i].item()]
+                if true_label_name == "Glaucoma" and prediction=="Glaucoma":
                     input_image = images[i]
                     mean = [0.485, 0.456, 0.406]
                     std = [0.229, 0.224, 0.225]
                     denormalized_image = denormalize(input_image.permute(1, 2, 0).cpu().numpy(), mean, std)
                     denormalized_image = np.clip(denormalized_image, 0, 1)  # Clip values to [0, 1]
                     
-                    superpixels = skimage.segmentation.quickshift(denormalized_image, kernel_size=4, max_dist=200, ratio=0.2)
+                    # superpixels = skimage.segmentation.quickshift(denormalized_image, kernel_size=4, max_dist=200, ratio=0.2)
+                    superpixels = skimage.segmentation.quickshift(denormalized_image, kernel_size=10, max_dist=200, ratio=0.2)
                     num_superpixels = np.unique(superpixels).shape[0]
                     
                     predicted_class = prediction_decode[i].item()
-                    num_perturb = 300
+                    num_perturb = 500
                     perturbations = np.random.binomial(1, 0.5, size=(num_perturb, num_superpixels))
                     predictions = []
                     for pert in perturbations:
@@ -362,6 +365,7 @@ def evaluate(data_loader, model, device, task, epoch, mode, num_class):
                         'true_label': true_label[i, 0].item(),
                         'highlighted_image': highlighted_image,
                     })
+                    exit()
             
         # if mode == 'test':
         #     for i in range(batch_size):
