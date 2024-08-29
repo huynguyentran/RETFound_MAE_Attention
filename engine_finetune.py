@@ -234,6 +234,10 @@ def lime(task, indices_of_corrects, dataset, model, device):
         original_image_path = dataset.imgs[i][0]
         original_image = Image.open(original_image_path).convert('RGB')
         original_image = np.array(original_image) / 255.0
+
+        original_image_filename = os.path.basename(original_image_path)
+        print(f"Original image file name: {original_image_filename}")
+
         
         # superpixels = skimage.segmentation.quickshift(denormalized_image, kernel_size=4, max_dist=200, ratio=0.2)
         superpixels = skimage.segmentation.quickshift(img_224x224, kernel_size=6, max_dist=200, ratio=0.2)
@@ -266,7 +270,7 @@ def lime(task, indices_of_corrects, dataset, model, device):
         simpler_model.fit(X=perturbations, y=predictions[:, :, predicted_class], sample_weight=weights)
         coeff = simpler_model.coef_[0]
 
-        num_top_features = 5
+        num_top_features = 3
         top_features = np.argsort(coeff)[-num_top_features:]
 
         mask = np.zeros(num_superpixels, dtype=bool)
@@ -299,11 +303,11 @@ def lime(task, indices_of_corrects, dataset, model, device):
 
         original_height, original_width, _ = original_image.shape
         target_size = (min(original_height, 1024), min(original_width, 1024))
-        io.imsave(os.path.join(save_dir, 'original_image.png'), (original_image * 255).astype(np.uint8))
+        io.imsave(os.path.join(save_dir, 'original_image_filename.png'), (original_image * 255).astype(np.uint8))
 
-        io.imsave(os.path.join(save_dir, f'batch_{i}_prediction_{predicted_class}_superpixels_224x224.png'),
+        io.imsave(os.path.join(save_dir, f'original_image_filename_superpixels_224x224.png'),
               segmentation.mark_boundaries(img_224x224 / 255.0, superpixels))
-        io.imsave(os.path.join(save_dir, f'batch_{i}_prediction_{predicted_class}_highlighted_224x224.png'), 
+        io.imsave(os.path.join(save_dir, f'original_image_filename_highlighted_224x224.png'), 
                   highlighted_image)
         
 
@@ -311,8 +315,8 @@ def lime(task, indices_of_corrects, dataset, model, device):
         scaled_highlighted_image = scale_up_image(highlighted_image, target_size)
 
         # Save scaled-up images
-        io.imsave(os.path.join(save_dir, f'batch_{i}_prediction_{predicted_class}_superpixels_{target_size[0]}x{target_size[1]}.png'), scaled_superpixels)
-        io.imsave(os.path.join(save_dir, f'batch_{i}_prediction_{predicted_class}_highlighted_{target_size[0]}x{target_size[1]}.png'), scaled_highlighted_image)
+        io.imsave(os.path.join(save_dir, f'original_image_filename_superpixels_{target_size[0]}x{target_size[1]}.png'), scaled_superpixels)
+        io.imsave(os.path.join(save_dir, f'original_image_filename_highlighted_{target_size[0]}x{target_size[1]}.png'), scaled_highlighted_image)
 
         results.append({
             'image': i,
