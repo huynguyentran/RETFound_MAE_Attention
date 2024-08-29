@@ -303,11 +303,11 @@ def lime(task, indices_of_corrects, dataset, model, device):
 
         original_height, original_width, _ = original_image.shape
         target_size = (min(original_height, 1024), min(original_width, 1024))
-        io.imsave(os.path.join(save_dir, 'original_image_filename.png'), (original_image * 255).astype(np.uint8))
+        io.imsave(os.path.join(save_dir, f'{original_image_filename}.png'), (original_image * 255).astype(np.uint8))
 
-        io.imsave(os.path.join(save_dir, f'original_image_filename_superpixels_224x224.png'),
+        io.imsave(os.path.join(save_dir, f'{original_image_filename}_superpixels_224x224.png'),
               segmentation.mark_boundaries(img_224x224 / 255.0, superpixels))
-        io.imsave(os.path.join(save_dir, f'original_image_filename_highlighted_224x224.png'), 
+        io.imsave(os.path.join(save_dir, f'{original_image_filename}_highlighted_224x224.png'), 
                   highlighted_image)
         
 
@@ -315,8 +315,8 @@ def lime(task, indices_of_corrects, dataset, model, device):
         scaled_highlighted_image = scale_up_image(highlighted_image, target_size)
 
         # Save scaled-up images
-        io.imsave(os.path.join(save_dir, f'original_image_filename_superpixels_{target_size[0]}x{target_size[1]}.png'), scaled_superpixels)
-        io.imsave(os.path.join(save_dir, f'original_image_filename_highlighted_{target_size[0]}x{target_size[1]}.png'), scaled_highlighted_image)
+        io.imsave(os.path.join(save_dir, f'{original_image_filename}_superpixels_{target_size[0]}x{target_size[1]}.png'), scaled_superpixels)
+        io.imsave(os.path.join(save_dir, f'{original_image_filename}_highlighted_{target_size[0]}x{target_size[1]}.png'), scaled_highlighted_image)
 
         results.append({
             'image': i,
