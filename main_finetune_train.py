@@ -281,7 +281,7 @@ def main(args):
     #         if "head" not in name:
     #             param.requires_grad = False
 
-    model = models_mae.__dict__[args.model](norm_pix_loss=args.norm_pix_loss)
+    model = models_mae.__dict__[args.model](norm_pix_loss=False)
     
     model.to(device)
 
