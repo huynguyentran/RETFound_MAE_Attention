@@ -21,6 +21,8 @@ assert timm.__version__ == "0.3.2" # version check
 from timm.models.layers import trunc_normal_
 from timm.data.mixup import Mixup
 from timm.loss import LabelSmoothingCrossEntropy, SoftTargetCrossEntropy
+import timm.optim.optim_factory as optim_factory
+
 
 import util.lr_decay as lrd
 import util.misc as misc
@@ -31,7 +33,9 @@ from util.misc import NativeScalerWithGradNormCount as NativeScaler
 import models_vit
 import models_mae
 
-from engine_finetune import train_one_epoch, evaluate
+# from engine_finetune import train_one_epoch, evaluate
+from engine_finetune import evaluate
+from engine_pretrain import train_one_epoch
 
 
 def get_args_parser():
@@ -307,11 +311,14 @@ def main(args):
         model_without_ddp = model.module
 
     # build optimizer with layer-wise lr decay (lrd)
-    param_groups = lrd.param_groups_lrd(model_without_ddp, args.weight_decay,
-        no_weight_decay_list=model_without_ddp.no_weight_decay(),
-        layer_decay=args.layer_decay
-    )
-    optimizer = torch.optim.AdamW(param_groups, lr=args.lr)
+    # param_groups = lrd.param_groups_lrd(model_without_ddp, args.weight_decay,
+    #     no_weight_decay_list=model_without_ddp.no_weight_decay(),
+    #     layer_decay=args.layer_decay
+    # )
+    # optimizer = torch.optim.AdamW(param_groups, lr=args.lr)
+
+    param_groups = optim_factory.add_weight_decay(model_without_ddp, args.weight_decay)
+    optimizer = torch.optim.AdamW(param_groups, lr=args.lr, betas=(0.9, 0.95))
     loss_scaler = NativeScaler()
 
     if mixup_fn is not None:
@@ -337,10 +344,16 @@ def main(args):
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             data_loader_train.sampler.set_epoch(epoch)
+        # train_stats = train_one_epoch(
+        #     model, criterion, data_loader_train,
+        #     optimizer, device, epoch, loss_scaler,
+        #     args.clip_grad, mixup_fn,
+        #     log_writer=log_writer,
+        #     args=args
+        # )
         train_stats = train_one_epoch(
-            model, criterion, data_loader_train,
+            model, data_loader_train,
             optimizer, device, epoch, loss_scaler,
-            args.clip_grad, mixup_fn,
             log_writer=log_writer,
             args=args
         )
