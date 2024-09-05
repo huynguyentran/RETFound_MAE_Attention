@@ -100,7 +100,7 @@ def perturb_image(img, perturbation, segments):
 results = []
 for img_name in os.listdir(image_dir):
     img_path = os.path.join(image_dir, img_name)
-    if if img_path.lower().endswith('.jpg')::
+    if img_path.lower().endswith('.jpg'):
         predicted_class, probabilities, original_image = predict(img_path, model, transform_test, device)
         print(f'Class: {predicted_class}')
         print(f'Probabilities: {probabilities.tolist()}')

@@ -122,14 +122,14 @@ def run_one_image(img, model, save_dir):
     save_image(im_paste[0], os.path.join(save_dir, "reconstruction_visible.png"))
 
 
-path = '/content/drive/MyDrive/huyn/Lime-uncropped/08 30 2024/Lime'
+path = '/content/drive/MyDrive/huyn/Lime-uncropped/09 04 2024/Lime'
 save_dir = os.path.join(path, "visualize")
 os.makedirs(save_dir, exist_ok= True)
 
 # This is an MAE model trained with pixels as targets for visualization (ViT-Large, training mask ratio=0.75)
 
 # download checkpoint if not exist
-chkpt_dir = '/content/drive/MyDrive/huyn/LACDHS_task_unfreeze/Taskcheckpoint-best.pth'
+chkpt_dir = '/content/drive/MyDrive/huyn/LACDHS_task_unfreeze_new_test/task/mae/checkpoint-9.pth'
 model_mae = prepare_model(chkpt_dir, 'mae_vit_large_patch16')
 print('Model loaded.')
 
@@ -158,4 +158,4 @@ for entry in os.listdir(path):
             plt.rcParams['figure.figsize'] = [5, 5]
             show_image(torch.tensor(img))
             print('MAE with pixel reconstruction:')
-            temp_save_dir = os.path.join(save_dir, entry
+            temp_save_dir = os.path.join(save_dir, entry)
