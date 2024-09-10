@@ -480,8 +480,21 @@ def evaluate(data_loader, model, device, task, epoch, mode, num_class):
     prediction_decode_list = np.array(prediction_decode_list)
 
     indices_of_corrects = np.where((true_label_decode_list == 0) & (prediction_decode_list == 0))[0]
- 
-    lime(task, indices_of_corrects, dataset, model, device)
+    
+    image_names_and_paths = []
+    for idx in indices_of_corrects:
+        image_path, _ = dataset.samples[idx]  # get the image path from dataset
+        image_name = os.path.basename(image_path)  # extract image name from path
+        image_names_and_paths.append([image_name, image_path])
+
+    # Write to CSV
+    csv_path = os.path.join(task, f"Correct_prediciton_images.csv")
+    with open(csv_path, mode='w', newline='', encoding='utf8') as cfa:
+        wf = csv.writer(cfa)
+        wf.writerow(["Image Name", "Image Path"])  # Header
+        wf.writerows(image_names_and_paths)  # Data
+
+    # lime(task, indices_of_corrects, dataset, model, device)
 
     confusion_matrix = multilabel_confusion_matrix(true_label_decode_list, prediction_decode_list,labels=[i for i in range(num_class)])
     acc, sensitivity, specificity, precision, G, F1, mcc = misc_measures(confusion_matrix)
