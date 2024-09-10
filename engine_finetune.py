@@ -8,6 +8,7 @@ import sys
 import csv
 import os
 import torch
+import pandas as pd
 import torch.nn as nn
 import torch.nn.functional as F
 from timm.data import Mixup
@@ -215,11 +216,17 @@ def scale_up_image(image, target_size):
 
 def lime(task, indices_of_corrects, dataset, model, device):
     results = []
-    save_dir = os.path.join(task, 'Lime')
-    os.makedirs(save_dir, exist_ok=True)
+
 
     mean = np.array([0.485, 0.456, 0.406])
     std = np.array([0.229, 0.224, 0.225])
+
+    path = '/content/drive/MyDrive/huyn/Lime-uncropped/09 09 2024/retfound'
+    save_dir = os.path.join(path, 'Lime')
+    os.makedirs(save_dir, exist_ok=True)
+    csv_path = '/content/drive/MyDrive/huyn/Lime-uncropped/09 09 2024/common_images.csv'
+    df = pd.read_csv(csv_path)
+    first_column_array = df.iloc[:, 0].values
 
     for i in indices_of_corrects:                 
         img_224x224 = dataset[i][0]  # Assuming the dataset object provides the transformed image
@@ -236,93 +243,94 @@ def lime(task, indices_of_corrects, dataset, model, device):
         original_image = np.array(original_image) / 255.0
 
         original_image_filename = os.path.basename(original_image_path)
-        print(f"Original image file name: {original_image_filename}")
+        if original_image_filename in first_column_array:
+            print(f"Original image file name: {original_image_filename}")
 
-        
-        # superpixels = skimage.segmentation.quickshift(denormalized_image, kernel_size=4, max_dist=200, ratio=0.2)
-        superpixels = skimage.segmentation.quickshift(img_224x224, kernel_size=6, max_dist=200, ratio=0.2)
-        num_superpixels = np.unique(superpixels).shape[0]
+            
+            # superpixels = skimage.segmentation.quickshift(denormalized_image, kernel_size=4, max_dist=200, ratio=0.2)
+            superpixels = skimage.segmentation.quickshift(img_224x224, kernel_size=6, max_dist=200, ratio=0.2)
+            num_superpixels = np.unique(superpixels).shape[0]
 
-        print(f"Superpixels shape: {superpixels.shape}")
-        print(f"Number of unique superpixels: {num_superpixels}")
+            print(f"Superpixels shape: {superpixels.shape}")
+            print(f"Number of unique superpixels: {num_superpixels}")
 
-        predicted_class = 0
-        num_perturb = 300
-        perturbations = np.random.binomial(1, 0.5, size=(num_perturb, num_superpixels))
+            predicted_class = 0
+            num_perturb = 300
+            perturbations = np.random.binomial(1, 0.5, size=(num_perturb, num_superpixels))
 
-        print(f"Perturbations shape: {perturbations.shape}")
+            print(f"Perturbations shape: {perturbations.shape}")
 
-        predictions = []
-        for pert in perturbations:
-            perturbed_img = perturb_image(img_224x224, pert, superpixels)
-            perturbed_img = torch.tensor(perturbed_img, dtype=torch.float32).permute(2, 0, 1).unsqueeze(0).to(device)
-            with torch.no_grad():
-                pred = model(perturbed_img)
-            predictions.append(pred.cpu().numpy())
+            predictions = []
+            for pert in perturbations:
+                perturbed_img = perturb_image(img_224x224, pert, superpixels)
+                perturbed_img = torch.tensor(perturbed_img, dtype=torch.float32).permute(2, 0, 1).unsqueeze(0).to(device)
+                with torch.no_grad():
+                    pred = model(perturbed_img)
+                predictions.append(pred.cpu().numpy())
 
-        predictions = np.array(predictions)
-        original_superpixels = np.ones(num_superpixels)[np.newaxis, :]  
-        distances = pairwise_distances(perturbations, original_superpixels, metric='cosine').ravel()
-        kernel_width = 0.25
-        weights = np.sqrt(np.exp(-(distances**2) / kernel_width**2))  
+            predictions = np.array(predictions)
+            original_superpixels = np.ones(num_superpixels)[np.newaxis, :]  
+            distances = pairwise_distances(perturbations, original_superpixels, metric='cosine').ravel()
+            kernel_width = 0.25
+            weights = np.sqrt(np.exp(-(distances**2) / kernel_width**2))  
 
-        simpler_model = LinearRegression()
-        simpler_model.fit(X=perturbations, y=predictions[:, :, predicted_class], sample_weight=weights)
-        coeff = simpler_model.coef_[0]
+            simpler_model = LinearRegression()
+            simpler_model.fit(X=perturbations, y=predictions[:, :, predicted_class], sample_weight=weights)
+            coeff = simpler_model.coef_[0]
 
-        num_top_features = 3
-        top_features = np.argsort(coeff)[-num_top_features:]
+            num_top_features = 3
+            top_features = np.argsort(coeff)[-num_top_features:]
 
-        mask = np.zeros(num_superpixels, dtype=bool)
-        mask[top_features] = True
+            mask = np.zeros(num_superpixels, dtype=bool)
+            mask[top_features] = True
 
-        # Print mask shape and top features
-        print(f"Mask shape: {mask.shape}")
-        print(f"Top features indices: {top_features}")
+            # Print mask shape and top features
+            print(f"Mask shape: {mask.shape}")
+            print(f"Top features indices: {top_features}")
 
-        mask_224x224 = np.zeros(img_224x224.shape[:2], dtype=bool)
-        for sp in range(num_superpixels):
-            mask_224x224[superpixels == sp] = mask[sp]
+            mask_224x224 = np.zeros(img_224x224.shape[:2], dtype=bool)
+            for sp in range(num_superpixels):
+                mask_224x224[superpixels == sp] = mask[sp]
 
-        # Scale up the mask to the original image size
-        scaled_mask = transform.resize(mask_224x224, 
-                                      (original_image.shape[0], original_image.shape[1]), 
-                                      order=0,  # Nearest-neighbor for binary mask
-                                      mode='reflect',
-                                      anti_aliasing=False)
-        scaled_mask = scaled_mask > 0.5
+            # Scale up the mask to the original image size
+            scaled_mask = transform.resize(mask_224x224, 
+                                        (original_image.shape[0], original_image.shape[1]), 
+                                        order=0,  # Nearest-neighbor for binary mask
+                                        mode='reflect',
+                                        anti_aliasing=False)
+            scaled_mask = scaled_mask > 0.5
 
-        # Apply mask to 224x224 image
-        highlighted_image = perturb_image(img_224x224, mask, superpixels)
-        if highlighted_image.max() > 1:
-            highlighted_image = highlighted_image / 255.0
+            # Apply mask to 224x224 image
+            highlighted_image = perturb_image(img_224x224, mask, superpixels)
+            if highlighted_image.max() > 1:
+                highlighted_image = highlighted_image / 255.0
 
-        # Apply mask to the original image
-        highlighted_original_image = original_image.copy()
-        highlighted_original_image[scaled_mask] = original_image[scaled_mask] * 0.5
+            # Apply mask to the original image
+            highlighted_original_image = original_image.copy()
+            highlighted_original_image[scaled_mask] = original_image[scaled_mask] * 0.5
 
-        original_height, original_width, _ = original_image.shape
-        target_size = (min(original_height, 1024), min(original_width, 1024))
-        io.imsave(os.path.join(save_dir, f'{original_image_filename}.png'), (original_image * 255).astype(np.uint8))
+            original_height, original_width, _ = original_image.shape
+            target_size = (min(original_height, 1024), min(original_width, 1024))
+            io.imsave(os.path.join(save_dir, f'{original_image_filename}.png'), (original_image * 255).astype(np.uint8))
 
-        io.imsave(os.path.join(save_dir, f'{original_image_filename}_superpixels_224x224.png'),
-              segmentation.mark_boundaries(img_224x224 / 255.0, superpixels))
-        io.imsave(os.path.join(save_dir, f'{original_image_filename}_highlighted_224x224.png'), 
-                  highlighted_image)
-        
+            io.imsave(os.path.join(save_dir, f'{original_image_filename}_superpixels_224x224.png'),
+                segmentation.mark_boundaries(img_224x224 / 255.0, superpixels))
+            io.imsave(os.path.join(save_dir, f'{original_image_filename}_highlighted_224x224.png'), 
+                    highlighted_image)
+            
 
-        scaled_superpixels = scale_up_image(segmentation.mark_boundaries(img_224x224 / 255.0, superpixels), target_size)
-        scaled_highlighted_image = scale_up_image(highlighted_image, target_size)
+            scaled_superpixels = scale_up_image(segmentation.mark_boundaries(img_224x224 / 255.0, superpixels), target_size)
+            scaled_highlighted_image = scale_up_image(highlighted_image, target_size)
 
-        # Save scaled-up images
-        io.imsave(os.path.join(save_dir, f'{original_image_filename}_superpixels_{target_size[0]}x{target_size[1]}.png'), scaled_superpixels)
-        io.imsave(os.path.join(save_dir, f'{original_image_filename}_highlighted_{target_size[0]}x{target_size[1]}.png'), scaled_highlighted_image)
+            # Save scaled-up images
+            io.imsave(os.path.join(save_dir, f'{original_image_filename}_superpixels_{target_size[0]}x{target_size[1]}.png'), scaled_superpixels)
+            io.imsave(os.path.join(save_dir, f'{original_image_filename}_highlighted_{target_size[0]}x{target_size[1]}.png'), scaled_highlighted_image)
 
-        results.append({
-            'image': i,
-            'predicted_class': predicted_class,
-            'highlighted_image': highlighted_image,
-        })
+            results.append({
+                'image': i,
+                'predicted_class': predicted_class,
+                'highlighted_image': highlighted_image,
+            })
             
 
 
@@ -330,9 +338,7 @@ def lime(task, indices_of_corrects, dataset, model, device):
         # skimage.io.imsave(os.path.join(save_dir, f'batch_{i}_prediction_{predicted_class}_superpixels.png'),
         #                     segmentation.mark_boundaries(img_224x224/ 2 + 0.5, superpixels))
 
-        # skimage.io.imsave(os.path.join(save_dir, f'batch_{i}_prediction_{predicted_class}_highlighted.png'), highlighted_image)
-
-        exit()
+        # skimage.io.imsave(os.path.join(save_dir, f'batch_{i}_prediction_{predicted_class}_highlighted.png'), highlighted_image
         
 @torch.no_grad()
 def evaluate(data_loader, model, device, task, epoch, mode, num_class):
@@ -481,20 +487,20 @@ def evaluate(data_loader, model, device, task, epoch, mode, num_class):
 
     indices_of_corrects = np.where((true_label_decode_list == 0) & (prediction_decode_list == 0))[0]
     
-    image_names_and_paths = []
-    for idx in indices_of_corrects:
-        image_path, _ = dataset.samples[idx]  # get the image path from dataset
-        image_name = os.path.basename(image_path)  # extract image name from path
-        image_names_and_paths.append([image_name, image_path])
+    # image_names_and_paths = []
+    # for idx in indices_of_corrects:
+    #     image_path, _ = dataset.samples[idx]  # get the image path from dataset
+    #     image_name = os.path.basename(image_path)  # extract image name from path
+    #     image_names_and_paths.append([image_name, image_path])
 
-    # Write to CSV
-    csv_path = os.path.join(task, f"Correct_prediciton_images.csv")
-    with open(csv_path, mode='w', newline='', encoding='utf8') as cfa:
-        wf = csv.writer(cfa)
-        wf.writerow(["Image Name", "Image Path"])  # Header
-        wf.writerows(image_names_and_paths)  # Data
+    # # Write to CSV
+    # csv_path = os.path.join(task, f"Correct_prediciton_images.csv")
+    # with open(csv_path, mode='w', newline='', encoding='utf8') as cfa:
+    #     wf = csv.writer(cfa)
+    #     wf.writerow(["Image Name", "Image Path"])  # Header
+    #     wf.writerows(image_names_and_paths)  # Data
 
-    # lime(task, indices_of_corrects, dataset, model, device)
+    lime(task, indices_of_corrects, dataset, model, device)
 
     confusion_matrix = multilabel_confusion_matrix(true_label_decode_list, prediction_decode_list,labels=[i for i in range(num_class)])
     acc, sensitivity, specificity, precision, G, F1, mcc = misc_measures(confusion_matrix)
