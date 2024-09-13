@@ -229,15 +229,13 @@ def lime(task, indices_of_corrects, dataset, model, device):
     first_column_array = df.iloc[:, 0].values
 
     for i in indices_of_corrects:                 
-        img_224x224 = dataset[i][0]  # Assuming the dataset object provides the transformed image
-        
-        # Convert 224x224 image to numpy array
+        img_224x224 = dataset[i][0]  
+    
         img_224x224 = img_224x224.permute(1, 2, 0).cpu().numpy()
         img_224x224 = img_224x224 * std + mean  # Denormalize
         img_224x224 = (img_224x224 * 255).astype(np.uint8)
         print(f"Original 224x224 image shape: {img_224x224.shape}")
 
-        # Get the original image
         original_image_path = dataset.imgs[i][0]
         original_image = Image.open(original_image_path).convert('RGB')
         original_image = np.array(original_image) / 255.0
@@ -332,14 +330,6 @@ def lime(task, indices_of_corrects, dataset, model, device):
                 'highlighted_image': highlighted_image,
             })
             
-
-
-          # Save the images
-        # skimage.io.imsave(os.path.join(save_dir, f'batch_{i}_prediction_{predicted_class}_superpixels.png'),
-        #                     segmentation.mark_boundaries(img_224x224/ 2 + 0.5, superpixels))
-
-        # skimage.io.imsave(os.path.join(save_dir, f'batch_{i}_prediction_{predicted_class}_highlighted.png'), highlighted_image
-        
 @torch.no_grad()
 def evaluate(data_loader, model, device, task, epoch, mode, num_class):
     criterion = torch.nn.CrossEntropyLoss()
@@ -355,25 +345,14 @@ def evaluate(data_loader, model, device, task, epoch, mode, num_class):
     true_label_decode_list = []
     true_label_onehot_list = []
     
-
-    # features = {}  # Dictionary to store features**
-
-    # def get_features(name):
-    #     def hook(model, input, output):
-    #         features[name] = output.detach()
-    #     return hook
-    # model.blocks[-1].norm1.register_forward_hook(get_features('vit_last_block'))
     dataset = data_loader.dataset
     class_names = dataset.classes  # List of class names
     print(class_names)
     for idx, class_name in enumerate(class_names):
         print(f"Class index {idx}: {class_name}")
 
-
     # switch to evaluation mode
     model.eval()
-
-    
 
     for batch in metric_logger.log_every(data_loader, 10, header):
         images = batch[0]
@@ -401,104 +380,22 @@ def evaluate(data_loader, model, device, task, epoch, mode, num_class):
         metric_logger.update(loss=loss.item())
         metric_logger.meters['acc1'].update(acc1.item(), n=batch_size)
 
-        # if mode == 'test':
-        #     with torch.enable_grad():
-        #         save_dir = os.path.join(task, 'GradCam')
-        #         for i in range(batch_size):
-        #             if true_label_decode[i].item() == 0:  # Check if true label is 0
-        #                 input_image = images[i]  # Add batch dimension
-        #                 prediction = prediction_decode[i].item()
-
-        #                 true_label_name = class_names[true_label_decode[i].item()]
-        #                 prediction_name = class_names[prediction]
-        #                 # Run Grad-CAM for each target layer
-        #                 if true_label_name == '2SKA_Suspected_Glaucoma':
-        #                     mean = [0.485, 0.456, 0.406]
-        #                     std = [0.229, 0.224, 0.225]
-        #                     denormalized_image = denormalize(input_image, mean, std)
-
-        #                     input_tensor = input_image.unsqueeze(0).to(device)  
-        #                     original_image = denormalized_image.cpu().numpy().transpose(1, 2, 0)  
-        #                     original_image = np.clip(original_image * 255, 0, 255).astype(np.uint8)  
-        #                     os.makedirs(save_dir, exist_ok=True)
-
-        #                     original_image_path = os.path.join(save_dir, f"batch_{i}_orginal_label_{true_label_name}.jpg")
-        #                     Image.fromarray(original_image).save(original_image_path)
-
-
-
-        #                     for j in [23]:
-        #                         target_layer = [model.module.blocks[j].attn]
-        #                         cam = GradCAM(model=model, target_layers=target_layer, reshape_transform=reshape_transform, use_cuda=device.type == 'cuda')
-        #                         cam_output = cam(input_tensor=input_tensor)
-        #                         if cam_output[0].max() != cam_output[0].min():
-        #                             cam_output = cam_output[0]
-                                    
-        #                             cam_output = (cam_output - cam_output.min()) / (cam_output.max() - cam_output.min() + 1e-8)  
-        #                             cam_output = np.uint8(255 * cam_output)  
-        #                             cam_output = cv2.equalizeHist(cam_output)
-        #                             cam_colored = cv2.applyColorMap(cam_output, cv2.COLORMAP_JET)
-                                    
-        #                             save_path = os.path.join(save_dir, f"batch_{i}_layer_{j}_prediction_{prediction_name}_grad_cam.jpg")
-        #                             save_path_colored = os.path.join(save_dir, f"batch_{i}_layer_{j}_prediction_{prediction_name}_grad_cam_colored.jpg")
-        #                             Image.fromarray(cam_output).save(save_path)
-        #                             Image.fromarray(cam_colored).save(save_path_colored)
-        #                     # Print the true label and prediction
-        #                     true_label_name = class_names[true_label_decode[i].item()]
-        #                     prediction_name = class_names[prediction]
-        #                     print(f"Image {i}: True Label = {true_label_name} (ID: {true_label_decode[i].item()}) | Prediction = {prediction_name} (ID: {prediction})")
-
-           
-            
-        # if mode == 'test':
-        #     for i in range(batch_size):
-        #         if true_label[i, 0].item() == 0:  # Change this condition as needed
-        #             mean = [0.485, 0.456, 0.406]
-        #             std = [0.229, 0.224, 0.225]
-        #             input_image = images[i]
-        #             save_dir = os.path.join(task, 'features')
-        #             os.makedirs(save_dir, exist_ok=True)
-
-        #             # Save original image
-        #             denormalized_image = denormalize(input_image, mean, std)
-        #             original_image = denormalized_image.cpu().numpy().transpose(1, 2, 0)
-        #             original_image = np.clip(original_image * 255, 0, 255).astype(np.uint8)
-        #             original_image_path = os.path.join(save_dir, f"image_batch_{i}_original.jpg")
-        #             Image.fromarray(original_image).save(original_image_path)
-
-        #             # Save feature maps as individual images
-        #             feature_maps = features['vit_last_block'][i].cpu().numpy()
-        #             for j, feature_map in enumerate(feature_maps):
-        #                 # Normalize each feature map to [0, 1] range
-        #                 feature_map = (feature_map - np.min(feature_map)) / (np.max(feature_map) - np.min(feature_map))
-        #                 feature_map = (feature_map * 255).astype(np.uint8)  # Scale to [0, 255]
-
-        #                 # Save the feature map as an image
-        #                 feature_map_image = Image.fromarray(feature_map)
-        #                 feature_map_path = os.path.join(save_dir, f"image_{i}_feature_{j}.jpg")
-        #                 feature_map_image.save(feature_map_path)
-
-        #             predicted_class = prediction_decode[i].item()
-        #             print(f"Saved features and original image for image {i} with predicted class {predicted_class}")
-   
-
     true_label_decode_list = np.array(true_label_decode_list)
     prediction_decode_list = np.array(prediction_decode_list)
 
     indices_of_corrects = np.where((true_label_decode_list == 0) & (prediction_decode_list == 0))[0]
     
-    # image_names_and_paths = []
-    # for idx in indices_of_corrects:
-    #     image_path, _ = dataset.samples[idx]  # get the image path from dataset
-    #     image_name = os.path.basename(image_path)  # extract image name from path
-    #     image_names_and_paths.append([image_name, image_path])
+    image_names_and_paths = []
+    for idx in indices_of_corrects:
+        image_path, _ = dataset.samples[idx]  
+        image_name = os.path.basename(image_path)  
+        image_names_and_paths.append([image_name, image_path])
 
-    # # Write to CSV
-    # csv_path = os.path.join(task, f"Correct_prediciton_images.csv")
-    # with open(csv_path, mode='w', newline='', encoding='utf8') as cfa:
-    #     wf = csv.writer(cfa)
-    #     wf.writerow(["Image Name", "Image Path"])  # Header
-    #     wf.writerows(image_names_and_paths)  # Data
+    csv_path = os.path.join(task, f"Correct_prediciton_images.csv")
+    with open(csv_path, mode='w', newline='', encoding='utf8') as cfa:
+        wf = csv.writer(cfa)
+        wf.writerow(["Image Name", "Image Path"])  
+        wf.writerows(image_names_and_paths)  
 
     lime(task, indices_of_corrects, dataset, model, device)
 
