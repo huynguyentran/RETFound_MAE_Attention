@@ -4,8 +4,8 @@ import numpy as np
 import models_vit
 import saliency.core as saliency
 from PIL import Image
-from tensorflow.keras.models import load_model
-import tensorflow as tf
+# from tensorflow.keras.models import load_model
+# import tensorflow as tf
 import PIL.Image
 import matplotlib.pyplot as plt
 from timm.data.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
@@ -13,16 +13,16 @@ import os
 import random
 
 
-def pre_input_vgg19(x):
-    return tf.keras.applications.vgg19.preprocess_input(x)
+# def pre_input_vgg19(x):
+#     return tf.keras.applications.vgg19.preprocess_input(x)
 
-def preprocess_image_vgg19(file_path):
-  im = PIL.Image.open(file_path)
-  im = im.resize((224,224))
-  im = np.asarray(im)
-  im = pre_input_vgg19(im)  # Apply preprocessing for VGG19
-  im = np.expand_dims(im, axis=0)
-  return im
+# def preprocess_image_vgg19(file_path):
+#   im = PIL.Image.open(file_path)
+#   im = im.resize((224,224))
+#   im = np.asarray(im)
+#   im = pre_input_vgg19(im)  # Apply preprocessing for VGG19
+#   im = np.expand_dims(im, axis=0)
+#   return im
 
 def build_transform():
     mean = IMAGENET_DEFAULT_MEAN
@@ -49,23 +49,23 @@ def retfound_preprocess_image(image_path):
     return transformed_image
 
 
-def call_model_function_vgg19(images, call_model_args=None, expected_keys=None):
-    target_class_idx = call_model_args['class_idx_str']
-    images = call_model_args['pre_image']
-    model = call_model_args['model']
-    images = tf.convert_to_tensor(images)
-    with tf.GradientTape() as tape:
-        if expected_keys==[saliency.base.INPUT_OUTPUT_GRADIENTS]:
-            tape.watch(images)
-            output_layer = model(images)
-            output_layer = output_layer[:,target_class_idx]
-            gradients = np.array(tape.gradient(output_layer, images))
-            return {saliency.base.INPUT_OUTPUT_GRADIENTS: gradients}
-        else:
-            conv_layer, output_layer = model(images)
-            gradients = np.array(tape.gradient(output_layer, conv_layer))
-            return {saliency.base.CONVOLUTION_LAYER_VALUES: conv_layer,
-                    saliency.base.CONVOLUTION_OUTPUT_GRADIENTS: gradients}
+# def call_model_function_vgg19(images, call_model_args=None, expected_keys=None):
+#     target_class_idx = call_model_args['class_idx_str']
+#     images = call_model_args['pre_image']
+#     model = call_model_args['model']
+#     images = tf.convert_to_tensor(images)
+#     with tf.GradientTape() as tape:
+#         if expected_keys==[saliency.base.INPUT_OUTPUT_GRADIENTS]:
+#             tape.watch(images)
+#             output_layer = model(images)
+#             output_layer = output_layer[:,target_class_idx]
+#             gradients = np.array(tape.gradient(output_layer, images))
+#             return {saliency.base.INPUT_OUTPUT_GRADIENTS: gradients}
+#         else:
+#             conv_layer, output_layer = model(images)
+#             gradients = np.array(tape.gradient(output_layer, conv_layer))
+#             return {saliency.base.CONVOLUTION_LAYER_VALUES: conv_layer,
+#                     saliency.base.CONVOLUTION_OUTPUT_GRADIENTS: gradients}
 
 def call_model_function_retfound(images, call_model_args=None, expected_keys=None):
     target_class_idx = call_model_args['class_idx_str']
@@ -97,9 +97,11 @@ def main():
 
     checkpoint = torch.load(weight_path, map_location='cpu')
     retfound_model.load_state_dict(checkpoint['model'])
-    weights_path = "/content/drive/MyDrive/huyn/Sreenihi_models/VGG19_224_Hyper_Parameter_Tuned_SG_1_NG_0_Dec@-05___Full_Fundus_Entire_Dataset_class_each.h5"
-    vgg_19 = load_model(weights_path)
-    vgg_19.summary()
+
+
+    # weights_path = "/content/drive/MyDrive/huyn/Sreenihi_models/VGG19_224_Hyper_Parameter_Tuned_SG_1_NG_0_Dec@-05___Full_Fundus_Entire_Dataset_class_each.h5"
+    # vgg_19 = load_model(weights_path)
+    # vgg_19.summary()
 
     image_directory_glaucoma = '/content/drive/MyDrive/huyn/LACDHS_splitted_data/test/Glaucoma'
 
@@ -117,11 +119,10 @@ def main():
 
     for image in sampled_images:
         image_path = os.path.join(image_directory_glaucoma, image)
-        gradient_saliency = saliency.GradientSaliency()
         image_name = image_path.split('/')[-1]
 
         original_image = Image.open(image_path).convert('RGB').resize((224, 224))
-        original_image_np = np.array(original_image)
+        # original_image_np = np.array(original_image)
 
         xrai_object = saliency.XRAI()
 
@@ -145,18 +146,18 @@ def main():
         retfound_xrai_attributions = xrai_object.GetMask(retfound_image_np, call_model_function_retfound, call_model_args, batch_size=1)
         #VGG19
 
-        vgg_input_tensor = preprocess_image_vgg19(image_path)
-        predictions = vgg_19(vgg_input_tensor)
-        vgg19_prediction_class = np.argmax(predictions[0])
-        call_model_args = {'class_idx_str': vgg19_prediction_class,
-                        'model': vgg_19,
-                        'vit': False,
-                        'pre_image': vgg_input_tensor}
+        # vgg_input_tensor = preprocess_image_vgg19(image_path)
+        # predictions = vgg_19(vgg_input_tensor)
+        # vgg19_prediction_class = np.argmax(predictions[0])
+        # call_model_args = {'class_idx_str': vgg19_prediction_class,
+        #                 'model': vgg_19,
+        #                 'vit': False,
+        #                 'pre_image': vgg_input_tensor}
 
-        vgg_image_np = vgg_input_tensor[0]
-        vgg_image_np= (vgg_image_np - vgg_image_np.min()) / (vgg_image_np.max() - vgg_image_np.min())
+        # vgg_image_np = vgg_input_tensor[0]
+        # vgg_image_np= (vgg_image_np - vgg_image_np.min()) / (vgg_image_np.max() - vgg_image_np.min())
 
-        vgg_19_xrai_attributions = xrai_object.GetMask(vgg_image_np, call_model_function_vgg19, call_model_args, batch_size=1)
+        # vgg_19_xrai_attributions = xrai_object.GetMask(vgg_image_np, call_model_function_vgg19, call_model_args, batch_size=1)
 
         first_number = random.randint(1, 2)
         second_number = 3 - first_number
@@ -178,14 +179,14 @@ def main():
         axes[first_number].axis('off')
         axes[first_number].set_title(f"RETFound Predicted {retfound_prediction_class}")
 
-        # Apply mask for VGG19 model attributions
-        mask = vgg_19_xrai_attributions >= np.percentile(vgg_19_xrai_attributions, percent)
-        highlighted_image = np.array(original_image)
-        highlighted_image[~mask] = 0
-        # Show the saliency map with the 'inferno' colormap and alpha blending
-        axes[second_number].imshow(highlighted_image)  # Add alpha for transparency
-        axes[second_number].axis('off')
-        axes[second_number].set_title(f"VGG19 Predicted {vgg19_prediction_class}")
+        # # Apply mask for VGG19 model attributions
+        # mask = vgg_19_xrai_attributions >= np.percentile(vgg_19_xrai_attributions, percent)
+        # highlighted_image = np.array(original_image)
+        # highlighted_image[~mask] = 0
+        # # Show the saliency map with the 'inferno' colormap and alpha blending
+        # axes[second_number].imshow(highlighted_image)  # Add alpha for transparency
+        # axes[second_number].axis('off')
+        # axes[second_number].set_title(f"VGG19 Predicted {vgg19_prediction_class}")
 
         plt.tight_layout(rect=[0, 0.03, 1, 0.95])
         plt.show()
@@ -211,13 +212,13 @@ def main():
         axes[first_number].imshow(highlighted_image)  # Show original with applied mask in gray
         axes[first_number].axis('off')
 
-        # Apply mask for VGG19 model attributions
-        mask = vgg_19_xrai_attributions >= np.percentile(vgg_19_xrai_attributions, percent)
-        highlighted_image = np.array(original_image)
-        highlighted_image[~mask] = 0
-        # Show the saliency map with the 'inferno' colormap and alpha blending
-        axes[second_number].imshow(highlighted_image)  # Add alpha for transparency
-        axes[second_number].axis('off')
+        # # Apply mask for VGG19 model attributions
+        # mask = vgg_19_xrai_attributions >= np.percentile(vgg_19_xrai_attributions, percent)
+        # highlighted_image = np.array(original_image)
+        # highlighted_image[~mask] = 0
+        # # Show the saliency map with the 'inferno' colormap and alpha blending
+        # axes[second_number].imshow(highlighted_image)  # Add alpha for transparency
+        # axes[second_number].axis('off')
 
         plt.tight_layout(rect=[0, 0.03, 1, 0.95])
         # plt.show()
@@ -231,17 +232,13 @@ def main():
         
     for image in another_sample:
         image_path = os.path.join(image_directory_glaucoma, image)
-        gradient_saliency = saliency.GradientSaliency()
         image_name = image_path.split('/')[-1]
 
         original_image = Image.open(image_path).convert('RGB').resize((224, 224))
-        original_image_np = np.array(original_image)
-
         xrai_object = saliency.XRAI()
 
 
         # RETFound
-
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         retfound_input_tensor  = retfound_preprocess_image(image_path).unsqueeze(0).to(device)
         retfound_model.to(device)
@@ -259,18 +256,18 @@ def main():
         retfound_xrai_attributions = xrai_object.GetMask(retfound_image_np, call_model_function_retfound, call_model_args, batch_size=1)
         #VGG19
 
-        vgg_input_tensor = preprocess_image_vgg19(image_path)
-        predictions = vgg_19(vgg_input_tensor)
-        vgg19_prediction_class = np.argmax(predictions[0])
-        call_model_args = {'class_idx_str': vgg19_prediction_class,
-                        'model': vgg_19,
-                        'vit': False,
-                        'pre_image': vgg_input_tensor}
+        # vgg_input_tensor = preprocess_image_vgg19(image_path)
+        # predictions = vgg_19(vgg_input_tensor)
+        # vgg19_prediction_class = np.argmax(predictions[0])
+        # call_model_args = {'class_idx_str': vgg19_prediction_class,
+        #                 'model': vgg_19,
+        #                 'vit': False,
+        #                 'pre_image': vgg_input_tensor}
 
-        vgg_image_np = vgg_input_tensor[0]
-        vgg_image_np= (vgg_image_np - vgg_image_np.min()) / (vgg_image_np.max() - vgg_image_np.min())
+        # vgg_image_np = vgg_input_tensor[0]
+        # vgg_image_np= (vgg_image_np - vgg_image_np.min()) / (vgg_image_np.max() - vgg_image_np.min())
 
-        vgg_19_xrai_attributions = xrai_object.GetMask(vgg_image_np, call_model_function_vgg19, call_model_args, batch_size=1)
+        # vgg_19_xrai_attributions = xrai_object.GetMask(vgg_image_np, call_model_function_vgg19, call_model_args, batch_size=1)
 
         first_number = random.randint(1, 2)
         second_number = 3 - first_number
@@ -292,14 +289,14 @@ def main():
         axes[first_number].axis('off')
         axes[first_number].set_title(f"RETFound Predicted {retfound_prediction_class}")
 
-        # Apply mask for VGG19 model attributions
-        mask = vgg_19_xrai_attributions >= np.percentile(vgg_19_xrai_attributions, percent)
-        highlighted_image = np.array(original_image)
-        highlighted_image[~mask] = 0
-        # Show the saliency map with the 'inferno' colormap and alpha blending
-        axes[second_number].imshow(highlighted_image)  # Add alpha for transparency
-        axes[second_number].axis('off')
-        axes[second_number].set_title(f"VGG19 Predicted {vgg19_prediction_class}")
+        # # Apply mask for VGG19 model attributions
+        # mask = vgg_19_xrai_attributions >= np.percentile(vgg_19_xrai_attributions, percent)
+        # highlighted_image = np.array(original_image)
+        # highlighted_image[~mask] = 0
+        # # Show the saliency map with the 'inferno' colormap and alpha blending
+        # axes[second_number].imshow(highlighted_image)  # Add alpha for transparency
+        # axes[second_number].axis('off')
+        # axes[second_number].set_title(f"VGG19 Predicted {vgg19_prediction_class}")
 
         plt.tight_layout(rect=[0, 0.03, 1, 0.95])
         plt.show()
@@ -325,13 +322,13 @@ def main():
         axes[first_number].imshow(highlighted_image)  # Show original with applied mask in gray
         axes[first_number].axis('off')
 
-        # Apply mask for VGG19 model attributions
-        mask = vgg_19_xrai_attributions >= np.percentile(vgg_19_xrai_attributions, percent)
-        highlighted_image = np.array(original_image)
-        highlighted_image[~mask] = 0
-        # Show the saliency map with the 'inferno' colormap and alpha blending
-        axes[second_number].imshow(highlighted_image)  # Add alpha for transparency
-        axes[second_number].axis('off')
+        # # Apply mask for VGG19 model attributions
+        # mask = vgg_19_xrai_attributions >= np.percentile(vgg_19_xrai_attributions, percent)
+        # highlighted_image = np.array(original_image)
+        # highlighted_image[~mask] = 0
+        # # Show the saliency map with the 'inferno' colormap and alpha blending
+        # axes[second_number].imshow(highlighted_image)  # Add alpha for transparency
+        # axes[second_number].axis('off')
 
         plt.tight_layout(rect=[0, 0.03, 1, 0.95])
         # plt.show()
