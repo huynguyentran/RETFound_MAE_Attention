@@ -147,7 +147,7 @@ def main():
         highlighted_image = np.array(original_image)
         highlighted_image[~mask] = 0
 
-        highlighted_image_path = os.path.join(save_dir_retfound_25, image_name)
+        highlighted_image_path = os.path.join(save_dir_retfound_10, image_name)
         Image.fromarray(highlighted_image).save(highlighted_image_path)
 
 
