@@ -154,11 +154,11 @@ def main():
 
     output_file_25 = f"{save_dir}/sampled_25.xlsx"
     df_25['RETFound_preds'] = preds_25
-    df_25.to_excel(output_file_25, index=False)
+    df_25.to_csv(output_file_25, index=False)
 
     output_file_10 = f"{save_dir}/sampled_10.xlsx"
     df_10['RETFound_preds'] = preds_10
-    df_10.to_excel(output_file_10, index=False)
+    df_10.to_csv(output_file_10, index=False)
 
 
 
