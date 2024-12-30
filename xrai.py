@@ -68,7 +68,7 @@ def main():
 
     image_directory_glaucoma = '/content/drive/MyDrive/huyn/LACDHS_splitted_data/test/Glaucoma'
 
-     predictions = []
+    predictions = []
     ground_truths = [] 
 
     
