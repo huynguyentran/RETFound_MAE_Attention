@@ -150,6 +150,8 @@ def evaluate(data_loader, model, device, task, epoch, mode, num_class):
     prediction_list = []
     true_label_decode_list = []
     true_label_onehot_list = []
+
+    csv_rows = []
     
     # switch to evaluation mode
     model.eval()
@@ -157,6 +159,9 @@ def evaluate(data_loader, model, device, task, epoch, mode, num_class):
     for batch in metric_logger.log_every(data_loader, 10, header):
         images = batch[0]
         target = batch[-1]
+        image_names = batch[2]
+        print(image_names)
+        
         images = images.to(device, non_blocking=True)
         target = target.to(device, non_blocking=True)
         true_label=F.one_hot(target.to(torch.int64), num_classes=num_class)
@@ -179,11 +184,26 @@ def evaluate(data_loader, model, device, task, epoch, mode, num_class):
         batch_size = images.shape[0]
         metric_logger.update(loss=loss.item())
         metric_logger.meters['acc1'].update(acc1.item(), n=batch_size)
+
+        for i in range(batch_size):
+            csv_rows.append({
+                'Image_Name': image_names[i],
+                'Prediction': prediction_decode[i].item(),
+                'Ground_Truth': true_label_decode[i].item()
+            })
     # gather the stats from all processes
     true_label_decode_list = np.array(true_label_decode_list)
     prediction_decode_list = np.array(prediction_decode_list)
     confusion_matrix = multilabel_confusion_matrix(true_label_decode_list, prediction_decode_list,labels=[i for i in range(num_class)])
     acc, sensitivity, specificity, precision, G, F1, mcc = misc_measures(confusion_matrix)
+
+    csv_file_path = '/content/drive/MyDrive/huyn/XRAI_VGG19_RETFOUND/retfound.csv'
+    with open(csv_file_path, mode='w', newline='') as csv_file:
+        writer = csv.DictWriter(csv_file, fieldnames=['Image_Name', 'Prediction', 'Ground_Truth'])
+        writer.writeheader()
+        writer.writerows(csv_rows)
+    
+    print(f"Predictions saved to {csv_file_path}")
     
     auc_roc = roc_auc_score(true_label_onehot_list, prediction_list,multi_class='ovr',average='macro')
     auc_pr = average_precision_score(true_label_onehot_list, prediction_list,average='macro')          
