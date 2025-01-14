@@ -109,8 +109,8 @@ def main():
     save_dir = '/content/drive/MyDrive/huyn/LACDHS_XRAI_VGG19_RETFOUND'
     os.makedirs(save_dir, exist_ok=True)
 
-    save_dir_retfound_25 = f'{save_dir}/RETFound/25'
-    save_dir_retfound_10 = f'{save_dir}/RETFound/10'
+    save_dir_retfound_25 = f'{save_dir}/RETFound/25_2'
+    save_dir_retfound_10 = f'{save_dir}/RETFound/10_2'
     os.makedirs(save_dir_retfound_25, exist_ok=True)
     os.makedirs(save_dir_retfound_10, exist_ok=True)
     
