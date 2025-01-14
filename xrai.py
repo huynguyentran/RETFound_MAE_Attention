@@ -68,120 +68,117 @@ def main():
 
     image_directory_glaucoma = '/content/drive/MyDrive/huyn/LACDHS_splitted_data/test/Glaucoma'
 
-    predictions = []
-    ground_truths = [] 
+    # predictions = []
+    # ground_truths = [] 
 
     
-    for image_path in image_directory_glaucoma:
-        image_name = os.path.basename(image_path)
+    # for image_path in image_directory_glaucoma:
+    #     image_name = os.path.basename(image_path)
 
-        # Preprocess image
-        retfound_input_tensor  = retfound_preprocess_image(image_path).unsqueeze(0).to(device)
+    #     # Preprocess image
+    #     retfound_input_tensor  = retfound_preprocess_image(image_path).unsqueeze(0).to(device)
 
-        # Make prediction
-        predictions_tensor = retfound_model(retfound_input_tensor)
-        predicted_class = torch.argmax(predictions_tensor[0]).item()
+    #     # Make prediction
+    #     predictions_tensor = retfound_model(retfound_input_tensor)
+    #     predicted_class = torch.argmax(predictions_tensor[0]).item()
 
-        # Store results
-        predictions.append(predicted_class)
-        ground_truths.append(0)  # Replace `0` with the actual label if available
+    #     # Store results
+    #     predictions.append(predicted_class)
+    #     ground_truths.append(0)  # Replace `0` with the actual label if available
 
-    # Save predictions to CSV
-    results_df = pd.DataFrame({
-        "Image_Name": image_files,
-        "Ground_Truth": ground_truths,
-        "Prediction": predictions
-    })
-    save_dir = '/content/drive/MyDrive/huyn/XRAI_VGG19_RETFOUND'
-    os.makedirs(save_dir, exist_ok=True)
-    output_file = os.path.join(save_dir, "retfound.csv")
-    results_df.to_csv(output_file, index=False)
-    
-
-
-
-    # image_files = [f for f in os.listdir(image_directory_glaucoma) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
-
-    # sampled_images_25 = set(random.sample(image_files, min(50, len(image_files))))
-    # df_25 = pd.DataFrame(sampled_images_25, columns=["Image File Name"])
-
-    # remaining_images = [f for f in image_files if f not in sampled_images_25]
-    
-    # sampled_images_10 = set(random.sample(remaining_images, min(50, len(remaining_images))))
-    # df_10 = pd.DataFrame(sampled_images_10, columns=["Image File Name"])
-
-    # save_dir = '/content/drive/MyDrive/huyn/LACDHS_XRAI_VGG19_RETFOUND'
+    # # Save predictions to CSV
+    # results_df = pd.DataFrame({
+    #     "Image_Name": image_files,
+    #     "Ground_Truth": ground_truths,
+    #     "Prediction": predictions
+    # })
+    # save_dir = '/content/drive/MyDrive/huyn/XRAI_VGG19_RETFOUND'
     # os.makedirs(save_dir, exist_ok=True)
-
-    # save_dir_retfound_25 = f'{save_dir}/RETFound/25'
-    # save_dir_retfound_10 = f'{save_dir}/RETFound/10'
-    # os.makedirs(save_dir_retfound_25, exist_ok=True)
-    # os.makedirs(save_dir_retfound_10, exist_ok=True)
+    # output_file = os.path.join(save_dir, "retfound.csv")
+    # results_df.to_csv(output_file, index=False)
     
-    # preds_10 = []
-    # preds_25 = []
-
-    # for image in sampled_images_25:
-    #     image_path = os.path.join(image_directory_glaucoma, image)
-    #     image_name = image_path.split('/')[-1]
-
-    #     original_image = Image.open(image_path).convert('RGB').resize((224, 224))
-    #     original_image_np = np.array(original_image)
-    #     xrai_object = saliency.XRAI()
 
 
-    #     # RETFound
-    #     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    #     retfound_input_tensor  = retfound_preprocess_image(image_path).unsqueeze(0).to(device)
-    #     retfound_model.to(device)
-    #     predictions = retfound_model(retfound_input_tensor)
-    #     retfound_prediction_class = torch.argmax(predictions[0]).item()
-    #     preds_25.append(retfound_prediction_class)
-    #     call_model_args = {'class_idx_str': retfound_prediction_class,
-    #                         'model': retfound_model,
-    #                     'vit': True,
-    #                     'pre_image': retfound_input_tensor}
 
-    #     retfound_xrai_attributions = xrai_object.GetMask(original_image_np, call_model_function_retfound, call_model_args, batch_size=1)
+    image_files = [f for f in os.listdir(image_directory_glaucoma) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
 
-    #     percent = 75
-    #     mask = retfound_xrai_attributions >= np.percentile(retfound_xrai_attributions, percent)
-    #     highlighted_image = np.array(original_image)
-    #     highlighted_image[~mask] = 0
+    file_path_25 = '/content/drive/MyDrive/huyn/LACDHS_XRAI_VGG19_RETFOUND/sampled_25.xlsx'
+    file_path_10 = '/content/drive/MyDrive/huyn/LACDHS_XRAI_VGG19_RETFOUND/sampled_10.xlsx'
 
-    #     highlighted_image_path = os.path.join(save_dir_retfound_25, image_name)
-    #     Image.fromarray(highlighted_image).save(highlighted_image_path)
+
+    save_dir = '/content/drive/MyDrive/huyn/LACDHS_XRAI_VGG19_RETFOUND'
+    os.makedirs(save_dir, exist_ok=True)
+
+    save_dir_retfound_25 = f'{save_dir}/RETFound/25'
+    save_dir_retfound_10 = f'{save_dir}/RETFound/10'
+    os.makedirs(save_dir_retfound_25, exist_ok=True)
+    os.makedirs(save_dir_retfound_10, exist_ok=True)
+    
+    preds_10 = []
+    preds_25 = []
+
+    for index, row in df_25.iterrows():
+        image_name = row[0]
+        image_path = os.path.join(image_directory_glaucoma, image)
+        # image_name = image_path.split('/')[-1]
+
+        original_image = Image.open(image_path).convert('RGB').resize((224, 224))
+        original_image_np = np.array(original_image)
+        xrai_object = saliency.XRAI()
+
+
+        # RETFound
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        retfound_input_tensor  = retfound_preprocess_image(image_path).unsqueeze(0).to(device)
+        retfound_model.to(device)
+        predictions = retfound_model(retfound_input_tensor)
+        retfound_prediction_class = torch.argmax(predictions[0]).item()
+        preds_25.append(retfound_prediction_class)
+        call_model_args = {'class_idx_str': retfound_prediction_class,
+                            'model': retfound_model,
+                        'vit': True,
+                        'pre_image': retfound_input_tensor}
+
+        retfound_xrai_attributions = xrai_object.GetMask(original_image_np, call_model_function_retfound, call_model_args, batch_size=1)
+
+        percent = 75
+        mask = retfound_xrai_attributions >= np.percentile(retfound_xrai_attributions, percent)
+        highlighted_image = np.array(original_image)
+        highlighted_image[~mask] = 0
+
+        highlighted_image_path = os.path.join(save_dir_retfound_25, image_name)
+        Image.fromarray(highlighted_image).save(highlighted_image_path)
         
-    # for image in sampled_images_10:
-    #     image_path = os.path.join(image_directory_glaucoma, image)
-    #     image_name = image_path.split('/')[-1]
+    for index, row in df_10.iterrows():
+        image_name = row[0]
+        image_path = os.path.join(image_directory_glaucoma, image_name)
 
-    #     original_image = Image.open(image_path).convert('RGB').resize((224, 224))
-    #     original_image_np = np.array(original_image)
-    #     xrai_object = saliency.XRAI()
+        original_image = Image.open(image_path).convert('RGB').resize((224, 224))
+        original_image_np = np.array(original_image)
+        xrai_object = saliency.XRAI()
 
 
-    #     # RETFound
-    #     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    #     retfound_input_tensor  = retfound_preprocess_image(image_path).unsqueeze(0).to(device)
-    #     retfound_model.to(device)
-    #     predictions = retfound_model(retfound_input_tensor)
-    #     retfound_prediction_class = torch.argmax(predictions[0]).item()
-    #     preds_10.append(retfound_prediction_class)
-    #     call_model_args = {'class_idx_str': retfound_prediction_class,
-    #                         'model': retfound_model,
-    #                     'vit': True,
-    #                     'pre_image': retfound_input_tensor}
+        # RETFound
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        retfound_input_tensor  = retfound_preprocess_image(image_path).unsqueeze(0).to(device)
+        retfound_model.to(device)
+        predictions = retfound_model(retfound_input_tensor)
+        retfound_prediction_class = torch.argmax(predictions[0]).item()
+        preds_10.append(retfound_prediction_class)
+        call_model_args = {'class_idx_str': retfound_prediction_class,
+                            'model': retfound_model,
+                        'vit': True,
+                        'pre_image': retfound_input_tensor}
 
-    #     retfound_xrai_attributions = xrai_object.GetMask(original_image_np, call_model_function_retfound, call_model_args, batch_size=1)
+        retfound_xrai_attributions = xrai_object.GetMask(original_image_np, call_model_function_retfound, call_model_args, batch_size=1)
 
-    #     percent = 90
-    #     mask = retfound_xrai_attributions >= np.percentile(retfound_xrai_attributions, percent)
-    #     highlighted_image = np.array(original_image)
-    #     highlighted_image[~mask] = 0
+        percent = 90
+        mask = retfound_xrai_attributions >= np.percentile(retfound_xrai_attributions, percent)
+        highlighted_image = np.array(original_image)
+        highlighted_image[~mask] = 0
 
-    #     highlighted_image_path = os.path.join(save_dir_retfound_10, image_name)
-    #     Image.fromarray(highlighted_image).save(highlighted_image_path)
+        highlighted_image_path = os.path.join(save_dir_retfound_10, image_name)
+        Image.fromarray(highlighted_image).save(highlighted_image_path)
 
 
 
